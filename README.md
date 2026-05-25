@@ -1,4 +1,4 @@
-# CageBreak — AI-Powered Container Attack & Defense Lab
+# ContainerSentry — AI-Powered Container Attack & Defense Lab
 
 A fully containerized security lab where a **Claude-powered AI agent** systematically attacks a vulnerable web application using **10 realistic container escape and exploitation techniques**, while **Falco** runtime security monitors every syscall and forwards alerts through **Falcosidekick** to **Elasticsearch** for analysis in **Kibana** and a custom **Security Dashboard** with downloadable reports and an interactive AI remediation agent.
 
@@ -10,7 +10,7 @@ A fully containerized security lab where a **Claude-powered AI agent** systemati
 
 ```mermaid
 graph TD
-  subgraph CG["CageBreak Platform (docker-compose.yml)"]
+  subgraph CG["ContainerSentry Platform (docker-compose.yml)"]
     A["⚡ Attacker Container
         Claude AI Agent
         10 attack scenarios"]
@@ -29,7 +29,7 @@ graph TD
     F["📊 Kibana
         Visualization
         Falco Event Dashboard"]
-    G["📈 CageBreak Dashboard
+    G["📈 ContainerSentry Dashboard
         Reports + Remediation
         AI Agent Interface"]
     H["🔧 Auto Setup
@@ -62,7 +62,7 @@ graph TD
   class H setup
 ```
 
-**Figure 1:** CageBreak System Architecture — Service Interactions and Data Flow
+**Figure 1:** ContainerSentry System Architecture — Service Interactions and Data Flow
 
 </div>
 
@@ -219,10 +219,10 @@ docker compose version
 
 ```bash
 # Clone the project
-git clone https://github.com/ritvikindupuri/cagebreak.git
+git clone https://github.com/ritvikindupuri/dockerfalco.git
 
 # Enter the project directory
-cd cagebreak
+cd dockerfalco
 ```
 
 ### Step 3: Configure Your API Key
@@ -280,8 +280,8 @@ falco               falcosecurity/falco-no-driver:latest           Up
 falcosidekick       falcosecurity/falcosidekick:latest             Up
 init-setup          curlimages/curl:latest                         Exited (0)
 kibana              docker.elastic.co/kibana/kibana:8.12.0        Up (healthy)
-sec-dashboard       cagebreak-dashboard                          Up
-vuln-app            cagebreak-vulnerable-app                     Up
+sec-dashboard       containersentry-dashboard                          Up
+vuln-app            containersentry-vulnerable-app                     Up
 ```
 
 Note: `ai-attacker` is **not running** yet — it only starts in Phase 2. `init-setup` has `Exited (0)` which means it ran successfully and finished.
@@ -380,7 +380,7 @@ docker compose down --volumes --remove-orphans
 
 # 4. Verify nothing is left
 docker compose ps
-docker ps -a | grep cagebreak  # should show no results
+docker ps -a | grep containersentry  # should show no results
 ```
 
 After full cleanup, to start fresh:
@@ -560,7 +560,7 @@ The init script should auto-create these, but if they don't appear, create them 
 | `priority` | Severity level | `CRITICAL`, `HIGH`, `WARNING` |
 | `output` | Human-readable alert message with context | `DOCKER SOCKET ACCESSED (user=root container=vuln-app...)` |
 | `container.name` | Which container triggered the alert | `vuln-app`, `ai-attacker` |
-| `container.image` | Container image | `cagebreak-vulnerable-app` |
+| `container.image` | Container image | `containersentry-vulnerable-app` |
 | `proc.name` | Process name that made the syscall | `python3`, `docker` |
 | `proc.cmdline` | Full command line | `python3 app.py` |
 | `evt.type` | System call type | `open`, `mount`, `connect` |

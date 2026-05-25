@@ -9,7 +9,7 @@ ES_URL="http://elasticsearch:9200"
 KB_URL="http://kibana:5601"
 
 echo "============================================"
-echo "  DockerFalco Auto-Setup"
+echo "  ContainerSentry Auto-Setup"
 echo "============================================"
 
 # ── Step 1: Wait for Elasticsearch ───────────────────────

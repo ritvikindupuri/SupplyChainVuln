@@ -152,12 +152,30 @@ ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 Replace the `sk-ant-...` with your actual Anthropic API key. Save and exit (`Ctrl+X`, then `Y`, then `Enter` in nano).
 
-### Step 4: Start All Services
+### Step 4: Phase 1 — Start All Infrastructure Services
+
+This starts everything **except the attacker** — you get blank dashboards, the vulnerable web app, Falco monitoring, Elasticsearch, and Kibana with pre-configured data views.
 
 ```bash
 # Pull all images and build containers
 docker compose up -d
 
+# Also run the auto-setup (creates ES index templates + Kibana data views)
+docker compose --profile setup up init-setup
+```
+
+The `init-setup` service waits for Elasticsearch and Kibana to finish starting, then:
+- Creates the `attack-logs-*` index template in Elasticsearch
+- Creates the `falco-events-*` index template in Elasticsearch  
+- Creates the **Attack Logs** data view in Kibana
+- Creates the **Falco Events** data view in Kibana
+- Prints a summary of all URLs
+
+You do **not** need to manually configure anything in Kibana.
+
+### Step 5: Verify Phase 1 is Running
+
+```bash
 # Check that all services are running
 docker compose ps
 ```
@@ -166,47 +184,79 @@ You should see output like:
 
 ```
 NAME                IMAGE                                          STATUS
-ai-attacker         dockerfalco-attacker                           exited (not started yet)
-elasticsearch       docker.elastic.co/elasticsearch/elasticsearch:8.12.0   Up
+elasticsearch       docker.elastic.co/elasticsearch/elasticsearch:8.12.0   Up (healthy)
 falco               falcosecurity/falco-no-driver:latest           Up
 falcosidekick       falcosecurity/falcosidekick:latest             Up
-kibana              docker.elastic.co/kibana/kibana:8.12.0        Up
+init-setup          curlimages/curl:latest                         Exited (0)
+kibana              docker.elastic.co/kibana/kibana:8.12.0        Up (healthy)
 sec-dashboard       dockerfalco-dashboard                          Up
 vuln-app            dockerfalco-vulnerable-app                     Up
 ```
 
-The attacker is in a separate profile because it requires the other services to be ready first.
+Note: `ai-attacker` is **not running** yet — it only starts in Phase 2. `init-setup` has `Exited (0)` which means it ran successfully and finished.
 
-### Step 5: Verify Services Are Healthy
+Now open these URLs in your browser to see the **blank** state:
 
-```bash
-# Wait 30-60 seconds for Elasticsearch and Kibana to fully start
-sleep 60
+| URL | What You See |
+|-----|-------------|
+| http://localhost:5000 | Security Dashboard — "No attacks recorded yet" with the Phase 2 command shown |
+| http://localhost:8080 | Vulnerable Web App — live feed says "Waiting for Phase 2 attacks..." |
+| http://localhost:5601 | Kibana — Data views exist but indices are empty (no documents yet) |
+| http://localhost:2802 | Falcosidekick UI — Event counters at 0 |
+| http://localhost:9200 | Elasticsearch API — Cluster is healthy, no `attack-logs` or `falco-events` indices yet |
 
-# Check Elasticsearch (should return cluster info)
-curl http://localhost:9200
+All UIs will auto-populate in real-time once Phase 2 starts — no manual refreshing needed.
 
-# Check Kibana (should return 200 OK)
-curl -s -o /dev/null -w "%{http_code}" http://localhost:5601/api/status
+### Step 6: Phase 2 — Launch the AI Attacker
 
-# Check vulnerable app
-curl http://localhost:8080/health
+Phase 2 starts the Claude-powered attacker container which immediately begins executing attacks against the vulnerable app. As attacks run:
 
-# Check dashboard
-curl http://localhost:5000/api/health
-
-# Check Falcosidekick
-curl http://localhost:2801/ping
-```
-
-### Step 6: Launch the AI Attacker
+1. **Security Dashboard** fills with attack entries in real-time (auto-refreshes every 10 seconds)
+2. **Vulnerable Web App** shows live system metrics spiking (CPU, memory, processes) and a live attack feed
+3. **Elasticsearch** receives `attack-logs-*` and `falco-events-*` documents
+4. **Kibana** data views become populated — you can immediately search and filter
+5. **Falcosidekick UI** counters start incrementing
 
 ```bash
-# Start the attacker container (defined in the 'attack' profile)
+# Start the attacker container (in the 'attack' profile)
 docker compose --profile attack up -d attacker
 
 # Watch the attacker's logs in real-time
 docker compose logs -f attacker
+```
+
+You will see output like:
+
+```
+[INIT] Anthropic API: CONFIGURED
+[INIT] Elasticsearch: http://elasticsearch:9200
+[INIT] Attack interval: 30s
+[INIT] Loaded 10 attack scenarios
+
+############################################################
+#  ATTACK ROUND 1
+############################################################
+
+============================================================
+[ATTACK] Executing: Docker Socket Abuse - Container Escape
+============================================================
+[RESULT] Success: True
+[RESULT] Detail: Privileged container escape via docker socket...
+```
+
+After ~2 minutes, a full round of all 10 attacks will have completed. Switch between your browser tabs to see each dashboard populate in real-time.
+
+### Stopping the Attacker
+
+```bash
+# Pause attacks (keeps all infrastructure running)
+docker compose --profile attack stop attacker
+
+# Resume attacks
+docker compose --profile attack start attacker
+
+# Completely remove the attacker
+docker compose --profile attack rm -f attacker
 ```
 
 You should see the attacker initializing, checking the target, and beginning to execute attacks:
@@ -647,17 +697,48 @@ docker compose logs -f falco
 ### 7. Dashboard Shows No Attacks
 
 ```bash
-# Check if the attacker has run any attacks
-curl "http://localhost:9200/attack-logs-*/_search?size=1"
+# Check if Phase 2 has been started
+docker compose ps attacker
 
-# If no results, the attacker hasn't pushed data yet
-# Wait for the attacker to complete attacks or check logs
+# If the attacker is not running, start Phase 2:
+docker compose --profile attack up -d attacker
+
+# Check if any attack data exists in Elasticsearch
+curl "http://localhost:9200/attack-logs-*/_search?size=1&ignore_unavailable=true"
+
+# If Elasticsearch returns "index_not_found_exception", the attacker
+# hasn't run yet — wait for Phase 2 attacks to complete
 
 # Check if the dashboard can reach Elasticsearch
-docker exec sec-dashboard curl -s http://elasticsearch:9200
+docker exec sec-dashboard curl -s http://elasticsearch:9200/_cluster/health
+
+# Check dashboard logs
+docker compose logs dashboard --tail=30
 
 # Restart dashboard
 docker compose restart dashboard
+```
+
+### 8. Kibana Shows "No data views" (init-setup failed)
+
+```bash
+# Check if init-setup ran
+docker compose ps init-setup
+
+# If it shows "Exited (0)", it succeeded — wait 30s and refresh Kibana
+# If it shows anything else, check its logs:
+docker compose logs init-setup
+
+# Manually re-run the setup:
+docker compose --profile setup run --rm init-setup
+
+# If that fails, create data views manually:
+# 1. Go to http://localhost:5601
+# 2. ☰ menu → Stack Management → Data Views
+# 3. Click "Create data view"
+# 4. Name: "Falco Events", Index pattern: "falco-events-*", Time: @timestamp
+# 5. Click "Save data view to Kibana"
+# 6. Repeat with Name: "Attack Logs", Index pattern: "attack-logs-*"
 ```
 
 ### 8. Port Already in Use
@@ -723,15 +804,22 @@ sudo ln -s /mnt/c/Program\ Files/Docker/Docker/resources/bin/docker-compose /usr
 ### 12. Complete Reset
 
 ```bash
+# Stop the attacker (Phase 2) first
+docker compose --profile attack stop attacker
+
 # Stop everything and remove all data
 docker compose down -v
 
-# Remove all containers and volumes
+# Remove all containers, volumes, and networks
 docker compose down --volumes --remove-orphans
 
 # Rebuild from scratch
 docker compose build --no-cache
+
+# Phase 1: Start infrastructure + auto-setup
 docker compose up -d
-sleep 60
+docker compose --profile setup up init-setup
+
+# Phase 2: Start the attack
 docker compose --profile attack up -d attacker
 ```

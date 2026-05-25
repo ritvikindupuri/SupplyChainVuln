@@ -389,7 +389,7 @@ async function fetchAttacks() {
 function renderAttacks(attacks) {
   const tbody = document.getElementById('attackTable');
   if (attacks.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><p>No attacks recorded yet. Start the attacker container.</p></div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="icon">&#x2699;</div><p><strong>No attacks recorded yet</strong></p><p style="font-size:11px;margin-top:4px">Phase 1 complete. Run Phase 2 to start the attacker:<br><code style="background:#1a1a2e;padding:4px 8px;border-radius:4px;font-size:11px">docker compose --profile attack up -d attacker</code></p><p style="font-size:10px;color:var(--text3);margin-top:4px">Auto-refreshing every 10 seconds...</p></div></td></tr>';
     return;
   }
   let html = '';

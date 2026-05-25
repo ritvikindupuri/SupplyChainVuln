@@ -197,7 +197,7 @@ def index():
             <div class="card full">
                 <h3>Live Attack Feed</h3>
                 <div class="live-feed" id="liveFeed">
-                    <div id="feedPlaceholder" style="color:#6a8fa8;padding:10px">Waiting for events...</div>
+                    <div id="feedPlaceholder" style="color:#6a8fa8;padding:10px">Waiting for Phase 2 attacks...<br><span style="font-size:10px">Run: docker compose --profile attack up -d attacker</span></div>
                 </div>
             </div>
 

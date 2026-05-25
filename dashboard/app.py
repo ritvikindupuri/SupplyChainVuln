@@ -17,12 +17,14 @@ attack_cache = []
 
 def fetch_attack_logs():
     try:
-        r = requests.get("%s/attack-logs-*/_search?sort=@timestamp:desc&size=100" % ELASTICSEARCH_URL, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
+        r = requests.get("%s/attack-logs-*/_search?sort=@timestamp:desc&size=100&ignore_unavailable=true" % ELASTICSEARCH_URL, timeout=10)
+        if r.status_code in (200, 404):
+            data = r.json() if r.status_code == 200 else {"hits": {"hits": []}}
             hits = data.get("hits", {}).get("hits", [])
             return [h["_source"] for h in hits]
-    except:
+    except requests.exceptions.ConnectionError:
+        pass
+    except Exception:
         pass
     return []
 

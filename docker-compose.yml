@@ -106,10 +106,14 @@ services:
       - "9200:9200"
     volumes:
       - es-data:/usr/share/elasticsearch/data
-      - ./elasticsearch/init.sh:/init.sh
     networks:
       - pentest-net
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
 
   # ── Security Dashboard (Reports + Remediation Agent) ──
   dashboard:
@@ -140,6 +144,7 @@ services:
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
       - SERVER_NAME=kibana
+      - SERVER_PUBLICBASEURL=http://localhost:5601
     ports:
       - "5601:5601"
     volumes:
@@ -147,6 +152,28 @@ services:
     networks:
       - pentest-net
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-s", "-f", "http://localhost:5601/api/status"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+
+  # ── Auto Setup (Index Templates + Kibana Data Views) ──
+  init-setup:
+    image: curlimages/curl:latest
+    container_name: init-setup
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+      kibana:
+        condition: service_healthy
+    volumes:
+      - ./elasticsearch/init.sh:/init.sh:ro
+    entrypoint: ["/bin/sh", "/init.sh"]
+    networks:
+      - pentest-net
+    profiles:
+      - setup
 
 networks:
   pentest-net:

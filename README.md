@@ -246,17 +246,58 @@ You will see output like:
 
 After ~2 minutes, a full round of all 10 attacks will have completed. Switch between your browser tabs to see each dashboard populate in real-time.
 
-### Stopping the Attacker
+### Stopping & Cleanup
+
+#### Stop Phase 2 only (pause attacks, keep all UIs and data)
 
 ```bash
-# Pause attacks (keeps all infrastructure running)
+# Stop the attacker but keep everything else running
 docker compose --profile attack stop attacker
 
-# Resume attacks
-docker compose --profile attack start attacker
+# Verify: attacker is stopped, infra stays up
+docker compose ps
 
-# Completely remove the attacker
-docker compose --profile attack rm -f attacker
+# (Optional) Resume attacks later:
+docker compose --profile attack start attacker
+```
+
+All dashboards, logs, and Elasticsearch data are preserved. You can browse past attacks, download reports, and run remediation against the existing data.
+
+#### Stop everything (full shutdown, keep data)
+
+```bash
+# Stop all containers but keep Elasticsearch volumes
+docker compose down
+
+# To restart later:
+docker compose up -d
+docker compose --profile setup up init-setup
+docker compose --profile attack up -d attacker
+```
+
+#### Full cleanup (destroy all data)
+
+```bash
+# 1. Stop the attacker
+docker compose --profile attack stop attacker
+
+# 2. Stop everything and delete Elasticsearch data volumes
+docker compose down -v
+
+# 3. Remove any leftover containers/networks
+docker compose down --volumes --remove-orphans
+
+# 4. Verify nothing is left
+docker compose ps
+docker ps -a | grep dockerfalco  # should show no results
+```
+
+After full cleanup, to start fresh:
+
+```bash
+docker compose up -d
+docker compose --profile setup up init-setup
+docker compose --profile attack up -d attacker
 ```
 
 You should see the attacker initializing, checking the target, and beginning to execute attacks:
@@ -803,23 +844,14 @@ sudo ln -s /mnt/c/Program\ Files/Docker/Docker/resources/bin/docker-compose /usr
 
 ### 12. Complete Reset
 
+See the **[Stopping & Cleanup](#stopping--cleanup)** section above for the full cleanup command sequence. Quick reset:
+
 ```bash
-# Stop the attacker (Phase 2) first
+# Nuke everything and start fresh
 docker compose --profile attack stop attacker
-
-# Stop everything and remove all data
-docker compose down -v
-
-# Remove all containers, volumes, and networks
-docker compose down --volumes --remove-orphans
-
-# Rebuild from scratch
+docker compose down -v --remove-orphans
 docker compose build --no-cache
-
-# Phase 1: Start infrastructure + auto-setup
 docker compose up -d
 docker compose --profile setup up init-setup
-
-# Phase 2: Start the attack
 docker compose --profile attack up -d attacker
 ```

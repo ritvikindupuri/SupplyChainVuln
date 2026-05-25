@@ -1,0 +1,156 @@
+version: "3.9"
+
+services:
+  # ── Vulnerable Target Application ──────────────────────
+  vulnerable-app:
+    build: ./vulnerable-app
+    container_name: vuln-app
+    ports:
+      - "8080:8080"
+    environment:
+      - APP_SECRET=supersecretkey123
+      - FLASK_ENV=development
+    cap_add:
+      - SYS_ADMIN
+      - DAC_OVERRIDE
+      - SETUID
+      - SETGID
+    volumes:
+      - /etc/shadow:/etc/host-shadow:ro       # simulated mount of host shadow
+      - /var/run/docker.sock:/var/run/docker.sock:ro  # intentionally exposed
+    security_opt:
+      - seccomp=unconfined
+    networks:
+      - pentest-net
+    restart: unless-stopped
+
+  # ── AI Attacker Agent (Claude-powered) ─────────────────
+  attacker:
+    build: ./attacker
+    container_name: ai-attacker
+    depends_on:
+      - vulnerable-app
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:?Set ANTHROPIC_API_KEY in .env}
+      - TARGET_URL=http://vulnerable-app:8080
+      - ATTACK_INTERVAL=30
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - VULNERABLE_APP_URL=http://vulnerable-app:8080
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    cap_add:
+      - SYS_PTRACE
+      - NET_ADMIN
+      - NET_RAW
+    networks:
+      - pentest-net
+    restart: unless-stopped
+    profiles:
+      - attack
+
+  # ── Falco Runtime Security ────────────────────────────
+  falco:
+    image: falcosecurity/falco-no-driver:latest
+    container_name: falco
+    privileged: true
+    depends_on:
+      - falcosidekick
+    volumes:
+      - /proc:/host/proc:ro
+      - /boot:/host/boot:ro
+      - /lib/modules:/host/lib/modules:ro
+      - /usr:/host/usr:ro
+      - /etc:/host/etc:ro
+      - ./falco/falco.yaml:/etc/falco/falco.yaml:ro
+      - ./falco/falco_rules.yaml:/etc/falco/rules.d/custom-rules.yaml:ro
+    environment:
+      - HOST_ROOT=/host
+      - FALCO_BPF_PROBE=
+    networks:
+      - pentest-net
+    restart: unless-stopped
+
+  # ── Falcosidekick (Event Forwarder) ───────────────────
+  falcosidekick:
+    image: falcosecurity/falcosidekick:latest
+    container_name: falcosidekick
+    depends_on:
+      elasticsearch:
+        condition: service_started
+    environment:
+      - ELASTICSEARCH_HOSTPORT=http://elasticsearch:9200
+      - ELASTICSEARCH_INDEX=falco-events
+      - ELASTICSEARCH_TYPE=event
+      - ELASTICSEARCH_USERNAME=
+      - ELASTICSEARCH_PASSWORD=
+      - ELASTICSEARCH_MUTUALTLS=false
+      - ELASTICSEARCH_CHECKCERT=false
+      - WEBUI_URL=http://0.0.0.0:2802
+      - WEBUI_EXTERNALURL=http://localhost:2802
+    ports:
+      - "2801:2801"
+    networks:
+      - pentest-net
+    restart: unless-stopped
+
+  # ── Elasticsearch ──────────────────────────────────────
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - cluster.name=pentest-cluster
+    ports:
+      - "9200:9200"
+    volumes:
+      - es-data:/usr/share/elasticsearch/data
+      - ./elasticsearch/init.sh:/init.sh
+    networks:
+      - pentest-net
+    restart: unless-stopped
+
+  # ── Security Dashboard (Reports + Remediation Agent) ──
+  dashboard:
+    build: ./dashboard
+    container_name: sec-dashboard
+    depends_on:
+      - elasticsearch
+      - vulnerable-app
+    environment:
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:?Set ANTHROPIC_API_KEY in .env}
+    ports:
+      - "5000:5000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    cap_add:
+      - SYS_PTRACE
+    networks:
+      - pentest-net
+    restart: unless-stopped
+
+  # ── Kibana (Falco Dashboard UI) ────────────────────────
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.12.0
+    container_name: kibana
+    depends_on:
+      - elasticsearch
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_NAME=kibana
+    ports:
+      - "5601:5601"
+    volumes:
+      - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
+    networks:
+      - pentest-net
+    restart: unless-stopped
+
+networks:
+  pentest-net:
+    driver: bridge
+
+volumes:
+  es-data:

@@ -1,4 +1,4 @@
-# DockerFalco — AI-Powered Container Attack & Defense Lab
+# CageBreak — AI-Powered Container Attack & Defense Lab
 
 A fully containerized security lab where a **Claude-powered AI agent** systematically attacks a vulnerable web application using **10 realistic container escape and exploitation techniques**, while **Falco** runtime security monitors every syscall and forwards alerts through **Falcosidekick** to **Elasticsearch** for analysis in **Kibana** and a custom **Security Dashboard** with downloadable reports and an interactive AI remediation agent.
 
@@ -6,42 +6,49 @@ A fully containerized security lab where a **Claude-powered AI agent** systemati
 
 ## System Architecture
 
+<div align="center">
+
 ```mermaid
 graph TD
-  subgraph "docker-compose.yml"
-    A["Attacker<br/>(Claude AI)"]
-    B["Vulnerable<br/>Web App"]
-    C["Falco"]
-    D["Falcosidekick"]
-    E["Elasticsearch"]
-    F["Kibana"]
-    G["Security<br/>Dashboard"]
-    H["Auto Setup<br/>(init-setup)"]
+  subgraph CG["CageBreak Platform — docker-compose.yml"]
+    A["fab:fa-docker <br/>Attacker Container<br/><br/>Claude AI Agent<br/><br/>10 attack scenarios"]
+    B["fab:fa-python <br/>Vulnerable Web App<br/><br/>Flask with CVEs<br/><br/>Real-time monitoring"]
+    C["fa:fa-shield-alt <br/>Falco<br/><br/>Runtime Security<br/><br/>Syscall monitoring"]
+    D["fa:fa-bolt <br/>Falcosidekick<br/><br/>Event Forwarding<br/>to Elasticsearch"]
+    E["fa:fa-database <br/>Elasticsearch<br/><br/>Log Storage<br/><br/>attack-logs + falco-events"]
+    F["fa:fa-chart-bar <br/>Kibana<br/><br/>Visualization<br/><br/>Falco Event UI"]
+    G["fa:fa-gauge-high <br/>CageBreak Dashboard<br/><br/>Reports + Remediation<br/><br/>AI Agent UI"]
+    H["fa:fa-wrench <br/>Auto Setup<br/><br/>Index Templates<br/>+ Data Views"]
   end
 
   A -->|"① live events"| B
   B -->|"② syscalls"| C
-  C -->|"③ alerts"| D
-  D -->|"④ index"| E
+  C -->|"③ Falco alerts"| D
+  D -->|"④ index events"| E
   E -->|"⑥ visualize"| F
-  E -->|"⑦ query"| G
-  A -->|"⑤ attack logs"| E
-  H -.->|"index templates + data views"| E
-  H -.->|"data views"| F
+  E -->|"⑦ query data"| G
+  A -->|"⑤ push logs + AI analysis"| E
+  H -.->|"create templates"| E
+  H -.->|"create data views"| F
 
-  style A fill:#ff3355,color:#fff
-  style B fill:#ffaa00,color:#000
-  style C fill:#8b5cf6,color:#fff
-  style D fill:#8b5cf6,color:#fff
-  style E fill:#00d4ff,color:#000
-  style F fill:#00d4ff,color:#000
-  style G fill:#00ff88,color:#000
-  style H fill:#6a8fa8,color:#fff
+  classDef attacker fill:#c0392b,color:#fff,stroke:#e74c3c
+  classDef target fill:#e67e22,color:#fff,stroke:#f39c12
+  classDef security fill:#8e44ad,color:#fff,stroke:#9b59b6
+  classDef storage fill:#2980b9,color:#fff,stroke:#3498db
+  classDef ui fill:#27ae60,color:#fff,stroke:#2ecc71
+  classDef setup fill:#7f8c8d,color:#fff,stroke:#95a5a6
+
+  class A attacker
+  class B target
+  class C,D security
+  class E,F storage
+  class G ui
+  class H setup
 ```
 
-<figure align="center">
-  <figcaption><strong>Figure 1:</strong> DockerFalco System Architecture — Service Interactions and Data Flow</figcaption>
-</figure>
+<strong>Figure 1:</strong> CageBreak System Architecture — Service Interactions and Data Flow
+
+</div>
 
 ### Flow-by-Flow Explanation
 
@@ -196,10 +203,10 @@ docker compose version
 
 ```bash
 # Clone the project
-git clone https://github.com/ritvikindupuri/dockerfalco.git
+git clone https://github.com/ritvikindupuri/cagebreak.git
 
 # Enter the project directory
-cd dockerfalco
+cd cagebreak
 ```
 
 ### Step 3: Configure Your API Key
@@ -257,8 +264,8 @@ falco               falcosecurity/falco-no-driver:latest           Up
 falcosidekick       falcosecurity/falcosidekick:latest             Up
 init-setup          curlimages/curl:latest                         Exited (0)
 kibana              docker.elastic.co/kibana/kibana:8.12.0        Up (healthy)
-sec-dashboard       dockerfalco-dashboard                          Up
-vuln-app            dockerfalco-vulnerable-app                     Up
+sec-dashboard       cagebreak-dashboard                          Up
+vuln-app            cagebreak-vulnerable-app                     Up
 ```
 
 Note: `ai-attacker` is **not running** yet — it only starts in Phase 2. `init-setup` has `Exited (0)` which means it ran successfully and finished.
@@ -357,7 +364,7 @@ docker compose down --volumes --remove-orphans
 
 # 4. Verify nothing is left
 docker compose ps
-docker ps -a | grep dockerfalco  # should show no results
+docker ps -a | grep cagebreak  # should show no results
 ```
 
 After full cleanup, to start fresh:
@@ -537,7 +544,7 @@ The init script should auto-create these, but if they don't appear, create them 
 | `priority` | Severity level | `CRITICAL`, `HIGH`, `WARNING` |
 | `output` | Human-readable alert message with context | `DOCKER SOCKET ACCESSED (user=root container=vuln-app...)` |
 | `container.name` | Which container triggered the alert | `vuln-app`, `ai-attacker` |
-| `container.image` | Container image | `dockerfalco-vulnerable-app` |
+| `container.image` | Container image | `cagebreak-vulnerable-app` |
 | `proc.name` | Process name that made the syscall | `python3`, `docker` |
 | `proc.cmdline` | Full command line | `python3 app.py` |
 | `evt.type` | System call type | `open`, `mount`, `connect` |

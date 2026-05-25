@@ -1,0 +1,288 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 950" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#2563EB"/>
+    </marker>
+    <marker id="arrowGray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#64748B"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#059669"/>
+    </marker>
+    <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#DC2626"/>
+    </marker>
+    <linearGradient id="layer1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F8FAFC"/>
+      <stop offset="100%" stop-color="#F1F5F9"/>
+    </linearGradient>
+    <linearGradient id="layer2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#FAFBFC"/>
+    </linearGradient>
+    <linearGradient id="layer3" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#F0F4F8"/>
+      <stop offset="100%" stop-color="#E2E8F0"/>
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.15"/>
+    </filter>
+    <filter id="shadowSmall" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.1"/>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="950" fill="#FFFFFF"/>
+
+  <!-- ═══════════════ LAYER 3: DATA LAYER (bottom) ═══════════════ -->
+  <rect x="30" y="640" width="1140" height="280" rx="8" fill="url(#layer3)" stroke="#CBD5E1" stroke-width="1.5"/>
+  <text x="50" y="672" font-size="16" font-weight="bold" fill="#475569">DATA LAYER</text>
+  <text x="50" y="692" font-size="11" fill="#94A3B8">Log storage and search infrastructure</text>
+
+  <!-- Elasticsearch Box -->
+  <rect x="350" y="710" width="500" height="180" rx="10" fill="#2563EB" filter="url(#shadow)"/>
+  <text x="380" y="745" font-size="18" font-weight="bold" fill="#FFFFFF">ELASTICSEARCH 8.12.0</text>
+  <text x="380" y="767" font-size="12" fill="#BFDBFE">Log Storage — Port 9200 (REST API)</text>
+
+  <!-- ES Sub-boxes -->
+  <rect x="380" y="785" width="210" height="80" rx="6" fill="#FBBF24" stroke="#D97706" stroke-width="1"/>
+  <text x="390" y="810" font-size="11" font-weight="bold" fill="#92400E">Index: attack-logs-*</text>
+  <text x="390" y="828" font-size="10" fill="#92400E">Attacker records + Claude AI analysis</text>
+  <text x="390" y="848" font-size="9" fill="#A16207">10 fields: attack_name, technique,</text>
+  <text x="390" y="862" font-size="9" fill="#A16207">status, severity, analysis, raw_output...</text>
+
+  <rect x="610" y="785" width="210" height="80" rx="6" fill="#FBBF24" stroke="#D97706" stroke-width="1"/>
+  <text x="620" y="810" font-size="11" font-weight="bold" fill="#92400E">Index: falco-events-*</text>
+  <text x="620" y="828" font-size="10" fill="#92400E">Falco syscall detection alerts</text>
+  <text x="620" y="848" font-size="9" fill="#A16207">15 fields: rule, priority, container.*,</text>
+  <text x="620" y="862" font-size="9" fill="#A16207">proc.*, evt.*, fd.name, tags...</text>
+
+  <!-- ═══════════════ LAYER 2: CONTAINER PLATFORM (middle) ═══════════════ -->
+  <rect x="30" y="180" width="1140" height="460" rx="8" fill="url(#layer2)" stroke="#CBD5E1" stroke-width="1.5"/>
+  <rect x="30" y="180" width="1140" height="460" rx="8" fill="none" stroke="#E2E8F0" stroke-width="2" stroke-dasharray="8,4"/>
+  <text x="50" y="212" font-size="16" font-weight="bold" fill="#475569">CONTAINER PLATFORM</text>
+  <text x="50" y="232" font-size="11" fill="#94A3B8">Docker Compose — Network: pentest-net (bridge)</text>
+
+  <!-- Phase 2 badge -->
+  <rect x="930" y="195" width="220" height="40" rx="20" fill="#FEF2C0" stroke="#D97706" stroke-width="1"/>
+  <text x="940" y="210" font-size="10" font-weight="bold" fill="#92400E">PHASE 2: docker compose --profile attack up -d attacker</text>
+  <text x="940" y="225" font-size="9" fill="#A16207">Starts attacker. All UIs populate in real-time.</text>
+
+  <!-- ─── Service Box: AI Attacker ─── -->
+  <rect x="60" y="260" width="195" height="150" rx="8" fill="#DC2626" filter="url(#shadow)"/>
+  <text x="75" y="290" font-size="14" font-weight="bold" fill="#FFFFFF">AI ATTACKER</text>
+  <line x1="75" y1="300" x2="240" y2="300" stroke="#EF4444" stroke-width="1"/>
+  <text x="75" y="320" font-size="11" fill="#FECACA">Claude-Powered</text>
+  <text x="75" y="338" font-size="11" fill="#FECACA">10 Attack Scenarios</text>
+  <text x="75" y="356" font-size="11" fill="#FECACA">Pushes to ES + live events</text>
+  <text x="75" y="380" font-size="10" fill="#FCA5A5" font-style="italic">(Phase 2 only — profile: attack)</text>
+
+  <!-- ─── Service Box: Vulnerable Web App ─── -->
+  <rect x="310" y="260" width="230" height="150" rx="8" fill="#EA580C" filter="url(#shadow)"/>
+  <text x="325" y="290" font-size="14" font-weight="bold" fill="#FFFFFF">VULNERABLE WEB APP</text>
+  <line x1="325" y1="300" x2="525" y2="300" stroke="#F97316" stroke-width="1"/>
+  <text x="325" y="320" font-size="11" fill="#FED7AA">Flask 3.0 — Port 8080</text>
+  <text x="325" y="338" font-size="11" fill="#FED7AA">Live System Metrics UI</text>
+  <text x="325" y="356" font-size="11" fill="#FED7AA">Attack Event Feed</text>
+  <text x="325" y="380" font-size="10" fill="#FDBA74" font-style="italic">CAP_SYS_ADMIN, seccomp=unconfined</text>
+  <text x="325" y="395" font-size="10" fill="#FDBA74" font-style="italic">/var/run/docker.sock mounted</text>
+
+  <!-- ─── Service Box: Falco ─── -->
+  <rect x="595" y="260" width="195" height="150" rx="8" fill="#7C3AED" filter="url(#shadow)"/>
+  <text x="610" y="290" font-size="14" font-weight="bold" fill="#FFFFFF">FALCO</text>
+  <line x1="610" y1="300" x2="775" y2="300" stroke="#A855F7" stroke-width="1"/>
+  <text x="610" y="320" font-size="11" fill="#DDD6FE">Runtime Security Monitor</text>
+  <text x="610" y="338" font-size="11" fill="#DDD6FE">20+ Custom Rules</text>
+  <text x="610" y="356" font-size="11" fill="#DDD6FE">MITRE ATT&amp;CK Tagged</text>
+  <text x="610" y="380" font-size="10" fill="#C4B5FD" font-style="italic">Privileged mode</text>
+  <text x="610" y="395" font-size="10" fill="#C4B5FD" font-style="italic">Host /proc + /boot mounted</text>
+
+  <!-- ─── Service Box: Falcosidekick ─── -->
+  <rect x="595" y="450" width="195" height="100" rx="8" fill="#7C3AED" filter="url(#shadow)"/>
+  <text x="610" y="478" font-size="14" font-weight="bold" fill="#FFFFFF">FALCOSIDEKICK</text>
+  <text x="610" y="498" font-size="11" fill="#DDD6FE">Event Forwarder</text>
+  <text x="610" y="516" font-size="11" fill="#DDD6FE">Port 2801 (webhook) + 2802 (UI)</text>
+
+  <!-- ─── Service Box: Kibana ─── -->
+  <rect x="840" y="260" width="195" height="150" rx="8" fill="#2563EB" filter="url(#shadow)"/>
+  <text x="855" y="290" font-size="14" font-weight="bold" fill="#FFFFFF">KIBANA 8.12.0</text>
+  <line x1="855" y1="300" x2="1020" y2="300" stroke="#60A5FA" stroke-width="1"/>
+  <text x="855" y="320" font-size="11" fill="#BFDBFE">Visualization Dashboard</text>
+  <text x="855" y="338" font-size="11" fill="#BFDBFE">Port 5601</text>
+  <text x="855" y="356" font-size="11" fill="#BFDBFE">Data Views:</text>
+  <text x="855" y="374" font-size="11" fill="#BFDBFE">"Attack Logs" + "Falco Events"</text>
+  <text x="855" y="395" font-size="10" fill="#93C5FD" font-style="italic">Pre-configured by init-setup</text>
+
+  <!-- ─── Service Box: Security Dashboard ─── -->
+  <rect x="310" y="450" width="230" height="100" rx="8" fill="#059669" filter="url(#shadow)"/>
+  <text x="325" y="478" font-size="14" font-weight="bold" fill="#FFFFFF">SECURITY DASHBOARD</text>
+  <text x="325" y="498" font-size="11" fill="#A7F3D0">Flask 3.0 — Port 5000</text>
+  <text x="325" y="516" font-size="11" fill="#A7F3D0">Reports + Remediation Agent (SSE)</text>
+
+  <!-- ─── Service Box: Auto Setup ─── -->
+  <rect x="840" y="450" width="195" height="100" rx="8" fill="#6B7280" stroke="#9CA3AF" stroke-width="2" stroke-dasharray="6,3" filter="url(#shadowSmall)"/>
+  <text x="855" y="478" font-size="14" font-weight="bold" fill="#FFFFFF">AUTO SETUP</text>
+  <text x="855" y="496" font-size="10" fill="#D1D5DB">(init-setup, profile: setup)</text>
+  <text x="855" y="514" font-size="11" fill="#D1D5DB">One-time — Exits on completion</text>
+  <text x="855" y="536" font-size="10" fill="#9CA3AF" font-style="italic">Creates ES templates + Kibana data views</text>
+
+  <!-- ═══════════════ LAYER 1: USER ACCESS LAYER (top) ═══════════════ -->
+  <rect x="30" y="20" width="1140" height="160" rx="8" fill="url(#layer1)" stroke="#CBD5E1" stroke-width="1.5"/>
+  <text x="50" y="50" font-size="16" font-weight="bold" fill="#475569">USER ACCESS LAYER</text>
+  <text x="50" y="70" font-size="11" fill="#94A3B8">Browser-based interfaces (localhost)</text>
+
+  <!-- Browser icons -->
+  <!-- Web App -->
+  <rect x="60" y="85" width="180" height="70" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" filter="url(#shadowSmall)"/>
+  <text x="75" y="105" font-size="11" font-weight="bold" fill="#EA580C">🌐 Web App UI</text>
+  <text x="75" y="125" font-size="10" fill="#64748B">http://localhost:8080</text>
+
+  <!-- Dashboard -->
+  <rect x="280" y="85" width="180" height="70" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" filter="url(#shadowSmall)"/>
+  <text x="295" y="105" font-size="11" font-weight="bold" fill="#059669">📊 Dashboard UI</text>
+  <text x="295" y="125" font-size="10" fill="#64748B">http://localhost:5000</text>
+
+  <!-- Kibana -->
+  <rect x="500" y="85" width="180" height="70" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" filter="url(#shadowSmall)"/>
+  <text x="515" y="105" font-size="11" font-weight="bold" fill="#2563EB">📈 Kibana UI</text>
+  <text x="515" y="125" font-size="10" fill="#64748B">http://localhost:5601</text>
+
+  <!-- ES API -->
+  <rect x="720" y="85" width="180" height="70" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" filter="url(#shadowSmall)"/>
+  <text x="735" y="105" font-size="11" font-weight="bold" fill="#2563EB">🔍 ES API</text>
+  <text x="735" y="125" font-size="10" fill="#64748B">http://localhost:9200</text>
+
+  <!-- Falcosidekick UI -->
+  <rect x="940" y="85" width="180" height="70" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1" filter="url(#shadowSmall)"/>
+  <text x="955" y="105" font-size="11" font-weight="bold" fill="#7C3AED">⚡ FalcoSidekick UI</text>
+  <text x="955" y="125" font-size="10" fill="#64748B">http://localhost:2802</text>
+
+  <!-- ═══════════════ ARROWS ═══════════════ -->
+
+  <!-- ① AI Attacker → Vuln Web App -->
+  <line x1="255" y1="310" x2="308" y2="310" stroke="#DC2626" stroke-width="2.5" marker-end="url(#arrowRed)"/>
+  <rect x="256" y="295" width="55" height="18" rx="9" fill="#DC2626"/>
+  <text x="261" y="308" font-size="10" font-weight="bold" fill="#FFFFFF">①</text>
+  <text x="270" y="340" font-size="9" fill="#DC2626">Live events</text>
+  <text x="270" y="352" font-size="8" fill="#94A3B8">POST /api/attack-event</text>
+
+  <!-- ② Vuln Web App → Falco (kernel, dashed) -->
+  <line x1="540" y1="310" x2="593" y2="310" stroke="#7C3AED" stroke-width="2" stroke-dasharray="6,3" marker-end="url(#arrowGray)"/>
+  <rect x="543" y="295" width="55" height="18" rx="9" fill="#7C3AED"/>
+  <text x="548" y="308" font-size="10" font-weight="bold" fill="#FFFFFF">②</text>
+  <text x="548" y="345" font-size="9" fill="#7C3AED">Syscalls</text>
+  <text x="548" y="357" font-size="8" fill="#94A3B8">(kernel level)</text>
+
+  <!-- ③ Falco → Falcosidekick -->
+  <line x1="692" y1="410" x2="692" y2="448" stroke="#7C3AED" stroke-width="2.5" marker-end="url(#arrowBlue)"/>
+  <rect x="668" y="420" width="48" height="18" rx="9" fill="#7C3AED"/>
+  <text x="673" y="433" font-size="10" font-weight="bold" fill="#FFFFFF">③</text>
+  <text x="698" y="433" font-size="9" fill="#7C3AED">Alerts</text>
+  <text x="698" y="445" font-size="8" fill="#94A3B8">HTTP POST</text>
+
+  <!-- ④ Falcosidekick → ES -->
+  <line x1="692" y1="550" x2="640" y2="708" stroke="#2563EB" stroke-width="2.5" marker-end="url(#arrowBlue)"/>
+  <rect x="630" y="610" width="55" height="18" rx="9" fill="#2563EB"/>
+  <text x="635" y="623" font-size="10" font-weight="bold" fill="#FFFFFF">④</text>
+  <text x="693" y="620" font-size="9" fill="#2563EB">Index events</text>
+  <text x="693" y="635" font-size="8" fill="#94A3B8">falco-events-*</text>
+
+  <!-- ⑤ AI Attacker → ES (side channel) -->
+  <path d="M 157 410 L 157 630 L 495 708" fill="none" stroke="#DC2626" stroke-width="2" stroke-dasharray="8,4" marker-end="url(#arrowRed)"/>
+  <rect x="125" y="580" width="55" height="18" rx="9" fill="#DC2626"/>
+  <text x="130" y="593" font-size="10" font-weight="bold" fill="#FFFFFF">⑤</text>
+  <text x="187" y="593" font-size="9" fill="#DC2626">Push logs</text>
+  <text x="187" y="608" font-size="8" fill="#94A3B8">attack-logs-*</text>
+
+  <!-- ⑥ ES → Kibana -->
+  <path d="M 780 810 L 780 500 L 937 410" fill="none" stroke="#2563EB" stroke-width="2.5" marker-end="url(#arrowBlue)"/>
+  <rect x="745" y="580" width="55" height="18" rx="9" fill="#2563EB"/>
+  <text x="750" y="593" font-size="10" font-weight="bold" fill="#FFFFFF">⑥</text>
+  <text x="807" y="590" font-size="9" fill="#2563EB">Visualize</text>
+  <text x="807" y="605" font-size="8" fill="#94A3B8">Query both</text>
+
+  <!-- ⑦ ES → Security Dashboard -->
+  <path d="M 450 708 L 450 552" fill="none" stroke="#059669" stroke-width="2.5" marker-end="url(#arrowGreen)"/>
+  <rect x="425" y="608" width="55" height="18" rx="9" fill="#059669"/>
+  <text x="430" y="621" font-size="10" font-weight="bold" fill="#FFFFFF">⑦</text>
+  <text x="487" y="618" font-size="9" fill="#059669">Query data</text>
+  <text x="487" y="633" font-size="8" fill="#94A3B8">For reports</text>
+
+  <!-- Auto Setup → ES (dashed) -->
+  <line x1="937" y1="450" x2="780" y2="710" stroke="#6B7280" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#arrowGray)"/>
+  <text x="860" y="545" font-size="9" fill="#6B7280">Create templates</text>
+
+  <!-- Auto Setup → Kibana (dashed) -->
+  <line x1="937" y1="450" x2="937" y2="412" stroke="#6B7280" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <text x="880" y="435" font-size="9" fill="#6B7280">Create data views</text>
+
+  <!-- Host Port Arrows (Layer 2 → Layer 1) -->
+  <!-- Web App: 8080 -->
+  <line x1="425" y1="260" x2="425" y2="155" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <rect x="393" y="180" width="65" height="16" rx="4" fill="#94A3B8"/>
+  <text x="397" y="192" font-size="9" font-weight="bold" fill="#FFFFFF">8080</text>
+
+  <!-- Dashboard: 5000 -->
+  <line x1="425" y1="450" x2="425" y2="155" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <rect x="393" y="305" width="65" height="16" rx="4" fill="#94A3B8"/>
+  <text x="397" y="317" font-size="9" font-weight="bold" fill="#FFFFFF">5000</text>
+
+  <!-- Kibana: 5601 -->
+  <line x1="937" y1="260" x2="937" y2="155" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <rect x="905" y="180" width="65" height="16" rx="4" fill="#94A3B8"/>
+  <text x="909" y="192" font-size="9" font-weight="bold" fill="#FFFFFF">5601</text>
+
+  <!-- ES: 9200 -->
+  <line x1="600" y1="710" x2="600" y2="155" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <rect x="568" y="420" width="65" height="16" rx="4" fill="#94A3B8"/>
+  <text x="572" y="432" font-size="9" font-weight="bold" fill="#FFFFFF">9200</text>
+
+  <!-- Falcosidekick: 2802 -->
+  <line x1="692" y1="450" x2="692" y2="155" stroke="#94A3B8" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <rect x="660" y="180" width="65" height="16" rx="4" fill="#94A3B8"/>
+  <text x="664" y="192" font-size="9" font-weight="bold" fill="#FFFFFF">2802</text>
+
+  <!-- ═══════════════ EXTERNAL: Claude API (top right) ═══════════════ -->
+  <ellipse cx="1110" cy="40" rx="60" ry="25" fill="#E8F5E9" stroke="#43A047" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="1085" y="38" font-size="16">☁️</text>
+  <text x="1075" y="52" font-size="9" font-weight="bold" fill="#2E7D32">Claude API</text>
+
+  <path d="M 157 350 C 157 200, 1050 60, 1060 45" fill="none" stroke="#6B7280" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#arrowGray)"/>
+  <text x="580" y="125" font-size="8" fill="#94A3B8">Attack analysis + remediation planning</text>
+
+  <!-- ═══════════════ PHASE 1 CALLOUT (left edge) ═══════════════ -->
+  <rect x="-5" y="195" width="28" height="430" rx="5" fill="#2563EB"/>
+  <text x="-2" y="350" font-size="11" font-weight="bold" fill="#FFFFFF" transform="rotate(-90,10,410)">PHASE 1: docker compose up -d &amp; docker compose --profile setup up init-setup</text>
+
+  <rect x="30" y="620" width="240" height="18" rx="4" fill="#FEF2C0" stroke="#D97706" stroke-width="1"/>
+  <text x="38" y="633" font-size="9" fill="#92400E">Phase 1 starts everything except the attacker</text>
+
+  <!-- ═══════════════ LEGEND ═══════════════ -->
+  <rect x="30" y="865" width="650" height="70" rx="6" fill="#FFFFFF" stroke="#CBD5E1" stroke-width="1"/>
+  <text x="45" y="885" font-size="12" font-weight="bold" fill="#475569">COLOR LEGEND</text>
+
+  <rect x="45" y="895" width="12" height="12" rx="2" fill="#DC2626"/>
+  <text x="62" y="906" font-size="10" fill="#475569">Attacker (hostile)</text>
+
+  <rect x="165" y="895" width="12" height="12" rx="2" fill="#EA580C"/>
+  <text x="182" y="906" font-size="10" fill="#475569">Target (vulnerable)</text>
+
+  <rect x="310" y="895" width="12" height="12" rx="2" fill="#7C3AED"/>
+  <text x="327" y="906" font-size="10" fill="#475569">Security monitoring</text>
+
+  <rect x="470" y="895" width="12" height="12" rx="2" fill="#2563EB"/>
+  <text x="487" y="906" font-size="10" fill="#475569">Data storage / viz</text>
+
+  <rect x="45" y="915" width="12" height="12" rx="2" fill="#059669"/>
+  <text x="62" y="926" font-size="10" fill="#475569">Remediation UI</text>
+
+  <rect x="165" y="915" width="12" height="12" rx="2" fill="#6B7280"/>
+  <text x="182" y="926" font-size="10" fill="#475569">Setup (one-time)</text>
+
+  <line x1="310" y1="922" x2="345" y2="922" stroke="#475569" stroke-width="2"/>
+  <text x="350" y="926" font-size="10" fill="#475569">Solid = data flow</text>
+
+  <line x1="470" y1="922" x2="505" y2="922" stroke="#475569" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="510" y="926" font-size="10" fill="#475569">Dashed = config/setup</text>
+</svg>

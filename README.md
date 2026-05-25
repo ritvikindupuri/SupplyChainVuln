@@ -7,63 +7,9 @@ A fully containerized security lab where a **Claude-powered AI agent** systemati
 ## System Architecture
 
 <div align="center">
-
-```mermaid
-graph TD
-  subgraph CG["ContainerSentry Platform (docker-compose.yml)"]
-    A["⚡ Attacker Container
-        Claude AI Agent
-        10 attack scenarios"]
-    B["🐍 Vulnerable Web App
-        Flask with CVEs
-        Real-time monitoring"]
-    C["🛡️ Falco
-        Runtime Security
-        Syscall monitoring"]
-    D["⚡ Falcosidekick
-        Event Forwarding
-        to Elasticsearch"]
-    E["🗄️ Elasticsearch
-        Log Storage
-        attack-logs + falco-events"]
-    F["📊 Kibana
-        Visualization
-        Falco Event Dashboard"]
-    G["📈 ContainerSentry Dashboard
-        Reports + Remediation
-        AI Agent Interface"]
-    H["🔧 Auto Setup
-        Index Templates
-        + Data Views"]
-  end
-
-  A -->|"① live events"| B
-  B -->|"② syscalls"| C
-  C -->|"③ Falco alerts"| D
-  D -->|"④ index events"| E
-  E -->|"⑥ visualize"| F
-  E -->|"⑦ query data"| G
-  A -->|"⑤ push logs + AI analysis"| E
-  H -.->|"create templates"| E
-  H -.->|"create data views"| F
-
-  classDef attacker fill:#dc2626,color:#fff,stroke:#ef4444,stroke-width:2px
-  classDef target fill:#ea580c,color:#fff,stroke:#f97316,stroke-width:2px
-  classDef security fill:#7c3aed,color:#fff,stroke:#a855f7,stroke-width:2px
-  classDef storage fill:#2563eb,color:#fff,stroke:#3b82f6,stroke-width:2px
-  classDef ui fill:#059669,color:#fff,stroke:#10b981,stroke-width:2px
-  classDef setup fill:#6b7280,color:#fff,stroke:#9ca3af,stroke-width:2px
-
-  class A attacker
-  class B target
-  class C,D security
-  class E,F storage
-  class G ui
-  class H setup
-```
-
-**Figure 1:** ContainerSentry System Architecture — Service Interactions and Data Flow
-
+  <img src="docs/architecture.svg" alt="ContainerSentry System Architecture Diagram" width="100%" style="max-width:1100px;"/>
+  <br/>
+  <strong>Figure 1:</strong> ContainerSentry System Architecture — Service Interactions and Data Flow
 </div>
 
 ### Flow-by-Flow Explanation

@@ -10,15 +10,31 @@ A fully containerized security lab where a **Claude-powered AI agent** systemati
 
 ```mermaid
 graph TD
-  subgraph CG["CageBreak Platform — docker-compose.yml"]
-    A["fab:fa-docker <br/>Attacker Container<br/><br/>Claude AI Agent<br/><br/>10 attack scenarios"]
-    B["fab:fa-python <br/>Vulnerable Web App<br/><br/>Flask with CVEs<br/><br/>Real-time monitoring"]
-    C["fa:fa-shield-alt <br/>Falco<br/><br/>Runtime Security<br/><br/>Syscall monitoring"]
-    D["fa:fa-bolt <br/>Falcosidekick<br/><br/>Event Forwarding<br/>to Elasticsearch"]
-    E["fa:fa-database <br/>Elasticsearch<br/><br/>Log Storage<br/><br/>attack-logs + falco-events"]
-    F["fa:fa-chart-bar <br/>Kibana<br/><br/>Visualization<br/><br/>Falco Event UI"]
-    G["fa:fa-gauge-high <br/>CageBreak Dashboard<br/><br/>Reports + Remediation<br/><br/>AI Agent UI"]
-    H["fa:fa-wrench <br/>Auto Setup<br/><br/>Index Templates<br/>+ Data Views"]
+  subgraph CG["CageBreak Platform (docker-compose.yml)"]
+    A["⚡ Attacker Container
+        Claude AI Agent
+        10 attack scenarios"]
+    B["🐍 Vulnerable Web App
+        Flask with CVEs
+        Real-time monitoring"]
+    C["🛡️ Falco
+        Runtime Security
+        Syscall monitoring"]
+    D["⚡ Falcosidekick
+        Event Forwarding
+        to Elasticsearch"]
+    E["🗄️ Elasticsearch
+        Log Storage
+        attack-logs + falco-events"]
+    F["📊 Kibana
+        Visualization
+        Falco Event Dashboard"]
+    G["📈 CageBreak Dashboard
+        Reports + Remediation
+        AI Agent Interface"]
+    H["🔧 Auto Setup
+        Index Templates
+        + Data Views"]
   end
 
   A -->|"① live events"| B
@@ -31,12 +47,12 @@ graph TD
   H -.->|"create templates"| E
   H -.->|"create data views"| F
 
-  classDef attacker fill:#c0392b,color:#fff,stroke:#e74c3c
-  classDef target fill:#e67e22,color:#fff,stroke:#f39c12
-  classDef security fill:#8e44ad,color:#fff,stroke:#9b59b6
-  classDef storage fill:#2980b9,color:#fff,stroke:#3498db
-  classDef ui fill:#27ae60,color:#fff,stroke:#2ecc71
-  classDef setup fill:#7f8c8d,color:#fff,stroke:#95a5a6
+  classDef attacker fill:#dc2626,color:#fff,stroke:#ef4444,stroke-width:2px
+  classDef target fill:#ea580c,color:#fff,stroke:#f97316,stroke-width:2px
+  classDef security fill:#7c3aed,color:#fff,stroke:#a855f7,stroke-width:2px
+  classDef storage fill:#2563eb,color:#fff,stroke:#3b82f6,stroke-width:2px
+  classDef ui fill:#059669,color:#fff,stroke:#10b981,stroke-width:2px
+  classDef setup fill:#6b7280,color:#fff,stroke:#9ca3af,stroke-width:2px
 
   class A attacker
   class B target
@@ -46,7 +62,7 @@ graph TD
   class H setup
 ```
 
-<strong>Figure 1:</strong> CageBreak System Architecture — Service Interactions and Data Flow
+**Figure 1:** CageBreak System Architecture — Service Interactions and Data Flow
 
 </div>
 

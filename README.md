@@ -6,8 +6,40 @@ A fully containerized security lab where a **Claude-powered AI agent** systemati
 
 ## System Architecture
 
+```mermaid
+graph TD
+  subgraph "docker-compose.yml"
+    A["Attacker<br/>(Claude AI)"]
+    B["Vulnerable<br/>Web App"]
+    C["Falco"]
+    D["Falcosidekick"]
+    E["Elasticsearch"]
+    F["Kibana"]
+    G["Security<br/>Dashboard"]
+    H["Auto Setup<br/>(init-setup)"]
+  end
+
+  A -->|"① live events"| B
+  B -->|"② syscalls"| C
+  C -->|"③ alerts"| D
+  D -->|"④ index"| E
+  E -->|"⑥ visualize"| F
+  E -->|"⑦ query"| G
+  A -->|"⑤ attack logs"| E
+  H -.->|"index templates + data views"| E
+  H -.->|"data views"| F
+
+  style A fill:#ff3355,color:#fff
+  style B fill:#ffaa00,color:#000
+  style C fill:#8b5cf6,color:#fff
+  style D fill:#8b5cf6,color:#fff
+  style E fill:#00d4ff,color:#000
+  style F fill:#00d4ff,color:#000
+  style G fill:#00ff88,color:#000
+  style H fill:#6a8fa8,color:#fff
+```
+
 <figure align="center">
-  <img src="https://mermaid.ink/svg/eyJjb2RlIjoiZ3JhcGggVERcbiAgc3ViZ3JhcGggZG9ja2VyLWNvbXBvc2UueW1sXG4gICAgQVtbQXR0YWNrZXIgKENsYXVkZSBBSSldXSAtLT58IGxpdmUgZXZlbnRzfCBCW1Z1bG5lcmFibGUgV2ViIEFwcF1cbiAgICBCIC0tPiBDe0ZhbGNvfVxuICAgIEMgLS0-IERbRmFsY29zaWRla2lja11cbiAgICBEIC0tPiBFW0VsYXN0aWNzZWFyY2hdXG4gICAgRSAtLT4gRltLaWJhbmFdXG4gICAgRSAtLT4gR1tTZWN1cml0eSBEYXNoYm9hcmRdXG4gICAgQSAtLT58IGF0dGFjayBsb2dzfCBFXG4gIGVuZFxuICBzdWJncmFwaCBOZXR3b3JrXG4gICAgQVcgLS0-IEJcbiAgICBDIC0tPiBFXG4gICAgRCAtLT4gRVxuICBlbmRcbiAgc3ViZ3JhcGggRGF0YSBmbG93XG4gICAgQVcgLS0-IEFU驉LaXN0aWNzZWFyY2hcbiAgICBCIC0tPiBmYWxjby1ldmVudHM6KiBpbmRleFxuICAgIEcgLS0-IGF0dGFjay1sb2dzOiogaW5kZXhcbiAgZW5kXG4iLCJtZXJtYWlkIjp7InRoZW1lIjoiZGFyayJ9fQ" alt="System Architecture Diagram" width="900"/>
   <figcaption><strong>Figure 1:</strong> DockerFalco System Architecture — Service Interactions and Data Flow</figcaption>
 </figure>
 
@@ -35,6 +67,42 @@ Kibana reads from both `falco-events-*` and `attack-logs-*` indices, providing p
 The custom Flask dashboard queries Elasticsearch for attack records, displays them with severity color-coding, and provides:
 - **Download Reports**: Professional-grade HTML security report with executive summary, attack timeline, detailed findings, MITRE mapping, affected infrastructure matrix, and remediation plan.
 - **AI Remediation Agent**: Select an attack technique, click "Execute Remediation", and watch the AI agent stream security hardening commands in real-time with thinking, command output, and status for each step.
+
+---
+
+## Attack Scenarios
+
+The AI attacker executes **10 realistic container attack techniques** against the vulnerable web app. Each attack maps to a known real-world container security weakness:
+
+### 1. Docker Socket Abuse
+Mounts the Docker socket (`/var/run/docker.sock`) exposed inside the vulnerable container and uses the Docker API to create a privileged container, escaping to the host. *Real-world: CI/CD runners, monitoring tools like Portainer commonly mount docker.sock for management, creating this exact escape vector.*
+
+### 2. CAP_SYS_ADMIN Capability Exploit
+Detects the `CAP_SYS_ADMIN` Linux capability and uses it to mount the host filesystem inside the container, gaining read/write access to host files. *Real-world: System monitoring, hardware-access, and network tools often run with extra capabilities like SYS_ADMIN.*
+
+### 3. Cgroup notify_on_release Escape
+Exploits the classic cgroup escape technique by writing to a cgroup's `release_agent` file. When the cgroup is emptied, the kernel executes the release agent on the host as root. *Real-world: CVE-2022-0492 — this exact bug affected Android and BuildKit containers using cgroup v1.*
+
+### 4. Procfs /proc/1/root Host Read
+Reads host files through the `/proc/1/root` symlink, which points to the host's root filesystem when PID namespace sharing is enabled. Accesses `/etc/shadow`, SSH keys, and Docker credentials. *Real-world: Monitoring and debug containers frequently share the host PID namespace to see host processes.*
+
+### 5. Privileged Container Full Escape
+When running in `--privileged` mode, the attacker has all capabilities, full device access, and can perform arbitrary kernel operations — effectively running as root on the host. *Real-world: Debug containers, CI runners, and some orchestrator agents run privileged "because it's easier."*
+
+### 6. Volume Mount Traversal
+Exploits host-path volume mounts (e.g., `/etc/shadow` mounted into the container) to read sensitive host files. Enumerates all mount points and checks for bind-mounted host paths. *Real-world: Config mounts, log directories, and secret injection often use bind mounts from host paths.*
+
+### 7. Container Network Namespace Escape
+Scans the host's internal network, discovers services running on the host (Docker API, Kubernetes API, Elasticsearch), and probes for open ports. Tries to access host-only services from within the container. *Real-world: Containers with `--network=host` or `CAP_NET_ADMIN` can access the host's full network namespace.*
+
+### 8. Docker API Abuse via SSRF
+Uses Server-Side Request Forgery (SSRF) vulnerabilities in the web app to reach the Docker API on TCP port 2375/2376 or uses the app's Docker proxy endpoint. *Real-world: Docker API exposed on TCP is a common dev-environment misconfiguration, and SSRF in web apps is the top cloud security vulnerability.*
+
+### 9. Sidecar Container Attack
+Discovers other containers on the same Docker network (Elasticsearch, Kibana, etc.) and probes them for unauthenticated access. Tries to read Elasticsearch indices or access Kibana without credentials. *Real-world: In Kubernetes pods, sidecar containers share a network namespace and can attack each other's localhost services.*
+
+### 10. Seccomp/AppArmor Profile Bypass
+Checks if seccomp is disabled (`seccomp=unconfined`) or if AppArmor is not enforced. When security profiles are missing, the attacker has access to all 300+ Linux syscalls, including dangerous ones like `mount`, `unshare`, and `ptrace`. *Real-world: seccomp=unconfined is common in dev/staging and even some production setups "to avoid compatibility issues."*
 
 ---
 

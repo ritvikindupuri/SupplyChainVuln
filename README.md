@@ -107,10 +107,12 @@ Lovable-generated apps work especially well because they contain realistic login
 git clone https://github.com/ritvikindupuri/PacketSentry.git
 cd PacketSentry
 
-# Set your API key (REQUIRED — the agent won't start without it)
+# Create .env from template and edit it
 cp .env.example .env
-# Edit .env and set ANTHROPIC_API_KEY=sk-ant-...
-# Optionally change ELASTIC_PASSWORD too (default: packetsentry)
+# Edit .env and set ANTHROPIC_API_KEY=sk-ant-... (REQUIRED)
+# All other variables have safe defaults:
+#   ELASTIC_PASSWORD=packetsentry
+#   CLAUDE_MODEL=claude-sonnet-4-6
 
 # Start infrastructure (ES, Kibana, Dashboard, Traffic Engine)
 docker compose up -d

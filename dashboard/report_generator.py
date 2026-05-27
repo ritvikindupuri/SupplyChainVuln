@@ -66,6 +66,8 @@ class FPDF2(FPDF):
     def cell(self, w, h=0, text="", **kw):
         super().cell(w, h, self._sanitize(text), **kw)
 
+CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
+
 class ReportGenerator:
     def __init__(self, es_url, es_user, es_pass, claude_api_key):
         self.es_url = es_url
@@ -134,7 +136,7 @@ class ReportGenerator:
                     "anthropic-version": "2023-06-01"
                 },
                 json={
-                    "model": "claude-sonnet-4-6",
+                    "model": CLAUDE_MODEL,
                     "max_tokens": 8192,
                     "messages": [{"role": "user", "content": prompt}]
                 },

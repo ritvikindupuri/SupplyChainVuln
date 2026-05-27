@@ -103,6 +103,7 @@ services:
       - SYS_ADMIN
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-6}
       - ES_URL=http://127.0.0.1:9200
       - ELASTIC_USER=elastic
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-packetsentry}
@@ -127,6 +128,7 @@ services:
       - ES_URL=http://elasticsearch:9200
       - ELASTIC_USER=elastic
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-packetsentry}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-6}
       - AGENT_URL=http://172.30.0.1:8000
     networks:
       - packetsentry

@@ -39,31 +39,7 @@ flowchart TD
     DASH -.->|"Start New Session → Agent resets,<br/>waits for next target"| AG
 ```
 
-## Attack Scenarios
-
-The traffic engine autonomously generates these REAL attacks against your custom target:
-
-| # | Attack | Tool | MITRE |
-|---|--------|------|-------|
-| 1 | **TCP SYN Port Scan** | nmap -sS | T1046 - Network Service Discovery |
-| 2 | **SYN Flood DoS** | hping3 --flood | T1498 - Network DoS |
-| 3 | **Slowloris HTTP** | Custom socket pool | T1499 - Endpoint DoS |
-| 4 | **TCP Connect Scan** | Python raw sockets | T1046 - Network Service Discovery |
-| 5 | **Directory Brute Force** | HTTP requests | T1595 - Active Scanning |
-| 6 | **DNS Amplification** | Raw UDP sockets | T1498 - Network DoS |
-
-## How It Works
-
-1. You provide a **custom web application URL** through the dashboard setup screen
-2. The URL is validated against the rules below — a brief AI-generated reason explains why it was accepted
-3. Once validated, the **Claude agent** begins capturing all traffic to/from your target via tshark
-4. The **traffic engine** starts generating real attack traffic (nmap scans, SYN floods, directory brute force, Slowloris) against your target
-5. The agent detects attacks, runs tshark commands to investigate, and streams its analysis to the dashboard in real-time
-6. All data (alerts, packets, activity) is logged to Elasticsearch for later querying
-7. The agent **stops autonomously** — Claude itself decides when analysis is complete based on what it found about the target. Simple sites finish in fewer cycles; complex apps get deeper investigation. Safety limits prevent infinite loops.
-8. After completion, the agent **waits for a new target** — click "Start New Session" on the session card to run again without restarting containers
-
-### Data Flow (numbered arrows in the architecture diagram)
+### Data Flow (numbered arrows in the diagram)
 
 | # | From | To | What |
 |---|------|----|------|
@@ -76,28 +52,6 @@ The traffic engine autonomously generates these REAL attacks against your custom
 | ⑦ | Web Dashboard | Report Generator | Triggers PDF generation: reads ES → calls Claude → builds PDF |
 | ⑧ | Web Dashboard | Kibana | Reverse proxy at /kibana/ (no direct host port — Docker Desktop limitation) |
 | ⑨ | Traffic Engine | Web Dashboard | Polls /api/target every 8s to discover the target URL |
-
-## URL Validation Rules
-
-When you enter a URL on the dashboard setup screen, these rules determine what's allowed:
-
-| Result | Types | Examples |
-|--------|-------|----------|
-| **✅ Allowed** | Private/local IPs — self-hosted apps on your network | `http://localhost:3000`, `http://192.168.1.50:8080`, `http://10.0.0.5` |
-| **✅ Allowed** | Custom apps on public hosting platforms | `https://my-site.netlify.app`, `https://my-app.vercel.app` |
-| **❌ Blocked** | Major public websites | `google.com`, `facebook.com`, `youtube.com`, `github.com`, `amazon.com`, `reddit.com` and similar |
-
-When a URL is accepted, a brief AI-generated reason appears explaining why the URL was allowed (e.g., *"Domain (my-site.netlify.app) is hosted on Netlify — a custom application hosting platform. Not on the blocked sites list."*). For the best experience, deploy a custom web app to a hosting platform or run one locally.
-
-### Recommended: Build a Test Target with Lovable
-
-For the best results, create a dedicated test application using **[Lovable](https://lovable.dev)** — an AI-powered web app builder (vibe coding). A simple CRUD app, API endpoint, or basic dashboard with login functionality gives the agent plenty to analyze:
-
-1. Go to https://lovable.dev and describe the app you want (e.g., "a simple task manager with user login")
-2. Export or deploy your app (Netlify, Vercel, or run locally)
-3. Enter the URL into PacketSentry's dashboard
-
-Lovable-generated apps work especially well because they contain realistic login pages, API calls, and data that the agent can probe for vulnerabilities.
 
 ## Prerequisites
 
@@ -161,6 +115,100 @@ docker compose logs -f claude-agent
 - **Session Complete card** — when the agent finishes autonomously, a summary card appears showing total cycles, final threat level, stop reason, and a "Start New Session" button to begin again with a new target
 
 The agent runs adaptively — Claude decides when it's thoroughly analyzed the target. Simple sites finish fast, complex apps get more cycles. Safety limits prevent infinite loops. See [docs/technical-documentation.md](docs/technical-documentation.md#314a-autonomous-session-lifecycle) for details.
+
+## Using the Dashboard
+
+Open **http://localhost:5000** — you'll first see the **setup screen** to enter your target URL. After setup, the dashboard has 5 tabs:
+
+### 1. Agent Console (default)
+Shows everything the agent does in real-time:
+- **Analysis cycles** — Each cycle begins with a header showing packet count and alert count
+- **Claude's thinking** — Streams character-by-character (typewriter effect) via SSE
+- **Command execution** — When Claude runs a tshark command, a command card appears with output
+- **Final analysis** — Summary card with threat level, attack name, MITRE mapping, and recommendations
+- **Session Complete card** — Appears automatically when the agent finishes its analysis cycle limit
+
+### 2. Alerts & Analysis
+A feed of all detected security alerts sorted by severity with filter buttons.
+
+### 3. Live Packets
+Raw packet table showing source/destination IPs, ports, protocol, info summary, and frame length.
+
+### 4. Ask the Agent
+Chat interface to ask about current network state, specific hosts, or protocols. Grayed out during active analysis.
+
+### 5. Reports
+Generate downloadable PDF reports with content written by Claude AI. Click "Generate Report" — Claude analyzes all session data from Elasticsearch (alerts, packets, activity) and produces a professionally formatted PDF with:
+- **Cover page**: white/blue design with severity bar chart, metadata box
+- **Executive Summary**: AI-generated security posture overview with business impact
+- **Key Findings**: detailed findings with severity, MITRE ATT&CK mapping, confidence, remediation steps
+- **Attack Timeline**: chronological log of all detected events
+- **Traffic Analysis**: protocol distribution, top talkers, anomalies
+- **Recommendations**: color-coded by priority (P0 red, P1 orange, P2 navy)
+- **Conclusion**: final assessment and outlook
+
+Falls back to heuristic analysis if the Claude API call fails.
+
+## How It Works
+
+1. You provide a **custom web application URL** through the dashboard setup screen
+2. The URL is validated against the rules below — a brief AI-generated reason explains why it was accepted
+3. Once validated, the **Claude agent** begins capturing all traffic to/from your target via tshark
+4. The **traffic engine** starts generating real attack traffic (nmap scans, SYN floods, directory brute force, Slowloris) against your target
+5. The agent detects attacks, runs tshark commands to investigate, and streams its analysis to the dashboard in real-time
+6. All data (alerts, packets, activity) is logged to Elasticsearch for later querying
+7. The agent **stops autonomously** — Claude itself decides when analysis is complete based on what it found about the target. Simple sites finish in fewer cycles; complex apps get deeper investigation. Safety limits prevent infinite loops.
+8. After completion, the agent **waits for a new target** — click "Start New Session" on the session card to run again without restarting containers
+
+## How the Agent Works
+
+1. **Capture**: Agent uses `tshark -i any` (host networking) to capture all host network traffic
+2. **Detect**: Custom `AttackDetector` identifies port scans, SYN floods, DNS tunneling, data exfiltration
+3. **Stream Analysis via Claude API**:
+   - Packet summaries + alerts are sent to Claude with tool-use capability
+   - Claude's streaming responses push to the dashboard in real-time via SSE
+   - Claude runs tshark commands mid-analysis and uses the output for deeper investigation
+4. **Log Everything**: Every thinking block, command, output, alert, and analysis is stored in Elasticsearch
+5. **Stop Autonomously**: Claude itself decides when analysis is complete (`analysis_complete` flag). A simple static site finishes in 1-2 cycles; a complex app gets deeper investigation. `MAX_CYCLES` (default 8) is a safety limit, and `NO_ALERT_STOP` (default 3) catches clean targets early.
+6. **Multi-Session**: After a session completes, click "Start New Session" on the dashboard to enter a new target URL — the agent handles it without any container restarts
+7. **Ask**: Chat interface lets you query the agent directly about current network state
+
+The session lifecycle is: **Starting** → **Waiting** (for target URL) → **Analyzing** (N cycles) → **Complete** → **Waiting** (for next target). The entire process runs without manual intervention after the target URL is configured.
+
+## Attack Scenarios
+
+The traffic engine autonomously generates these REAL attacks against your custom target:
+
+| # | Attack | Tool | MITRE |
+|---|--------|------|-------|
+| 1 | **TCP SYN Port Scan** | nmap -sS | T1046 - Network Service Discovery |
+| 2 | **SYN Flood DoS** | hping3 --flood | T1498 - Network DoS |
+| 3 | **Slowloris HTTP** | Custom socket pool | T1499 - Endpoint DoS |
+| 4 | **TCP Connect Scan** | Python raw sockets | T1046 - Network Service Discovery |
+| 5 | **Directory Brute Force** | HTTP requests | T1595 - Active Scanning |
+| 6 | **DNS Amplification** | Raw UDP sockets | T1498 - Network DoS |
+
+## URL Validation Rules
+
+When you enter a URL on the dashboard setup screen, these rules determine what's allowed:
+
+| Result | Types | Examples |
+|--------|-------|----------|
+| **✅ Allowed** | Private/local IPs — self-hosted apps on your network | `http://localhost:3000`, `http://192.168.1.50:8080`, `http://10.0.0.5` |
+| **✅ Allowed** | Custom apps on public hosting platforms | `https://my-site.netlify.app`, `https://my-app.vercel.app` |
+| **❌ Blocked** | Major public websites | `google.com`, `facebook.com`, `youtube.com`, `github.com`, `amazon.com`, `reddit.com` and similar |
+
+When a URL is accepted, a brief AI-generated reason appears explaining why the URL was allowed (e.g., *"Domain (my-site.netlify.app) is hosted on Netlify — a custom application hosting platform. Not on the blocked sites list."*). For the best experience, deploy a custom web app to a hosting platform or run one locally.
+
+### Recommended: Build a Test Target with Lovable
+
+For the best results, create a dedicated test application using **[Lovable](https://lovable.dev)** — an AI-powered web app builder (vibe coding). A simple CRUD app, API endpoint, or basic dashboard with login functionality gives the agent plenty to analyze:
+
+1. Go to https://lovable.dev and describe the app you want (e.g., "a simple task manager with user login")
+2. Export or deploy your app (Netlify, Vercel, or run locally)
+3. Enter the URL into PacketSentry's dashboard
+
+Lovable-generated apps work especially well because they contain realistic login pages, API calls, and data that the agent can probe for vulnerabilities.
 
 ## Access the UIs
 
@@ -236,54 +284,6 @@ The `traffic-engine` container generates real attacks using nmap, hping3, and ra
 Because the agent uses `network_mode: host` with `tshark -i any`, it captures **everything on your computer's network interfaces** — your browser traffic, system updates, background noise, etc. This is intentional — a real SOC analyst sees all host traffic too.
 
 The agent's AI distinguishes between the two, focusing its analysis on suspicious patterns while still logging everything to Elasticsearch.
-
-## Using the Dashboard
-
-Open **http://localhost:5000** — you'll first see the **setup screen** to enter your target URL. After setup, the dashboard has 5 tabs:
-
-### 1. Agent Console (default)
-Shows everything the agent does in real-time:
-- **Analysis cycles** — Each cycle begins with a header showing packet count and alert count
-- **Claude's thinking** — Streams character-by-character (typewriter effect) via SSE
-- **Command execution** — When Claude runs a tshark command, a command card appears with output
-- **Final analysis** — Summary card with threat level, attack name, MITRE mapping, and recommendations
-- **Session Complete card** — Appears automatically when the agent finishes its analysis cycle limit
-
-### 2. Alerts & Analysis
-A feed of all detected security alerts sorted by severity with filter buttons.
-
-### 3. Live Packets
-Raw packet table showing source/destination IPs, ports, protocol, info summary, and frame length.
-
-### 4. Ask the Agent
-Chat interface to ask about current network state, specific hosts, or protocols. Grayed out during active analysis.
-
-### 5. Reports
-Generate downloadable PDF reports with content written by Claude AI. Click "Generate Report" — Claude analyzes all session data from Elasticsearch (alerts, packets, activity) and produces a professionally formatted PDF with:
-- **Cover page**: white/blue design with severity bar chart, metadata box
-- **Executive Summary**: AI-generated security posture overview with business impact
-- **Key Findings**: detailed findings with severity, MITRE ATT&CK mapping, confidence, remediation steps
-- **Attack Timeline**: chronological log of all detected events
-- **Traffic Analysis**: protocol distribution, top talkers, anomalies
-- **Recommendations**: color-coded by priority (P0 red, P1 orange, P2 navy)
-- **Conclusion**: final assessment and outlook
-
-Falls back to heuristic analysis if the Claude API call fails.
-
-## How the Agent Works
-
-1. **Capture**: Agent uses `tshark -i any` (host networking) to capture all host network traffic
-2. **Detect**: Custom `AttackDetector` identifies port scans, SYN floods, DNS tunneling, data exfiltration
-3. **Stream Analysis via Claude API**:
-   - Packet summaries + alerts are sent to Claude with tool-use capability
-   - Claude's streaming responses push to the dashboard in real-time via SSE
-   - Claude runs tshark commands mid-analysis and uses the output for deeper investigation
-4. **Log Everything**: Every thinking block, command, output, alert, and analysis is stored in Elasticsearch
-5. **Stop Autonomously**: Claude itself decides when analysis is complete (`analysis_complete` flag). A simple static site finishes in 1-2 cycles; a complex app gets deeper investigation. `MAX_CYCLES` (default 8) is a safety limit, and `NO_ALERT_STOP` (default 3) catches clean targets early.
-6. **Multi-Session**: After a session completes, click "Start New Session" on the dashboard to enter a new target URL — the agent handles it without any container restarts
-7. **Ask**: Chat interface lets you query the agent directly about current network state
-
-The session lifecycle is: **Starting** → **Waiting** (for target URL) → **Analyzing** (N cycles) → **Complete** → **Waiting** (for next target). The entire process runs without manual intervention after the target URL is configured.
 
 ## Troubleshooting
 

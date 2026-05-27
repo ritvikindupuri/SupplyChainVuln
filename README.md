@@ -6,53 +6,37 @@ PacketSentry is a fully containerized network penetration testing platform where
 
 ## Architecture
 
-```
-                          ┌─────────────────────┐
-                          │  1. You enter custom │
-                          │   URL on dashboard   │
-                          └──────────┬──────────┘
-                                     │
-                                     ▼
-┌────────────────────────────────────────────────────────────────────────┐
-│                         PacketSentry Platform                           │
-│                                                                         │
-│  ┌──────────────┐          ┌───────────────────────┐                    │
-│  │  Traffic     │◄────────►│  Your Custom Web App  │   LAYER 1          │
-│  │  Engine      │ ①attacks │  (user-provided URL)  │   ATTACK GEN       │
-│  │  (nmap,      │─────────►│                        │                    │
-│  │   hping3)    │ ⑨polls  │                        │                    │
-│  └──────┬───────┘  target  └───────────┬───────────┘                    │
-│         │                              │                                │
-│         │                              │ ② tshark capture              │
-│         │                              ▼                                │
-│         │                     ┌──────────────────┐                      │
-│         └────────────────────►│  Claude Agent     │   LAYER 2           │
-│          attack IPs logged    │  (host network +  │   AI ANALYSIS       │
-│                               │   tshark + query  │                      │
-│                               │   API :8000)      │                      │
-│                               └───┬────┬────┬────┘                      │
-│                                   │    │    │                           │
-│                   ③push to ES     │    │    │ ④SSE events               │
-│                                   ▼    │    ▼                           │
-│  ┌──────────────────────┐         │    ┌─────────────────────┐          │
-│  │  Elasticsearch       │◄───────┘    │  Web Dashboard :5000│ LAYER 3  │
-│  │  alerts-* / packets-*│              │  Console / Alerts / │ STORAGE  │
-│  │  activity-* indexes  │──➔Kibana    │  Packets / Chat /   │ & UI     │
-│  └──────────────────────┘  ⑧proxy     │  Reports            │          │
-│                                at      └──┬──────┬──────┬───┘          │
-│                                 /kibana/   │      │      │              │
-│                                          ⑤│      │⑦     │              │
-│                                           │      │      │              │
-│                                     ┌─────▼──┐ ┌──▼──────▼──┐          │
-│                                     │ Ask    │ │ Report     │          │
-│                                     │ Agent  │ │ Generator  │          │
-│                                     │ (chat) │ │→Claude→PDF │          │
-│                                     └────────┘ └────────────┘          │
-│                                                                         │
-│  ⑥ You access dashboard at http://localhost:5000                        │
-│                                                                         │
-│  "Start New Session" → Agent resets, waits for next target URL          │
-└────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+    subgraph L1["LAYER 1 — ATTACK GENERATION"]
+        TE["Traffic Engine<br/>nmap / hping3 / Python<br/>6 attack types"]
+        CWA["Your Custom Web App<br/>User-provided URL<br/>localhost / LAN / Netlify / Vercel"]
+        TE -->|"① Attacks + Normal traffic"| CWA
+        TE -.->|"⑨ Poll /api/target every 8s"| DASH
+    end
+
+    subgraph L2["LAYER 2 — AI ANALYSIS"]
+        direction TB
+        AG["Claude AI Security Agent<br/><br/>▸ Packet Capture (tshark -i any)<br/>▸ Attack Detection (pattern matching)<br/>▸ Claude Analysis (streaming + tool-use)<br/>▸ HTTP Query API (port 8000)<br/>▸ Ask Agent chat handler<br/><br/>Autonomous stop via analysis_complete"]
+    end
+
+    subgraph L3["LAYER 3 — STORAGE & VISUALIZATION"]
+        ES[("Elasticsearch<br/>Index: alerts-* / packets-* / activity-*")]
+        KB["Kibana<br/>Data visualization & dashboards"]
+        DASH["Web Dashboard :5000<br/>Setup | Console | Alerts | Packets | Chat<br/>SSE real-time streaming"]
+        RG["Report Generator<br/>Queries ES → Calls Claude →<br/>Professional PDF report"]
+    end
+
+    CWA -->|"② Captured via host networking (tshark)"| AG
+    AG -->|"③ Push alerts + packets + activity"| ES
+    AG -->|"④ SSE events + analysis"| DASH
+    ES -.->|Query| KB
+    DASH -.->|"⑤ User chat queries"| AG
+    DASH -.->|"⑧ Proxy /kibana/"| KB
+    DASH -->|"⑦ Generate report"| RG
+    RG -.->|"Calls Claude API"| API["Claude API<br/>(Anthropic)"]
+    USER["👤 Security Analyst (You)"] -->|"⑥ Access http://localhost:5000"| DASH
+    DASH -.->|"Start New Session → Agent resets,<br/>waits for next target"| AG
 ```
 
 ## Attack Scenarios

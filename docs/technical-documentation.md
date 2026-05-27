@@ -156,7 +156,7 @@ The traffic engine polls `http://dashboard:5000/api/target` every 8 seconds unti
 The traffic engine (`traffic-engine/engine.py`) runs two concurrent threads: a normal traffic loop that generates HTTP requests and DNS lookups against the custom target URL, and an attack scheduler that randomly selects and executes attacks every 30-90 seconds.
 
 **Stage 2: Packet Capture**
-The Claude agent (`claude-agent/capture.py`) uses `tshark -i any` with host networking to capture all network packets. It runs a continuous capture loop in a background thread, storing the most recent 500 packets in a deque buffer.
+The Claude agent (`claude-agent/capture.py`) uses `tshark -i any` with host networking to capture all network packets. tshark runs as root inside the container — this is required for raw packet capture and is standard for any packet analysis tool. It runs a continuous capture loop in a background thread, storing the most recent 500 packets in a deque buffer.
 
 **Stage 3: Heuristic Detection**
 Every 8 seconds, the agent's main loop takes the most recent 60 packets and runs them through the AttackDetector (`claude-agent/attack_detector.py`), which applies pattern-matching heuristics for port scans, SYN floods, DNS tunneling, and data exfiltration.

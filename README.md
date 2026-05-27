@@ -162,7 +162,7 @@ Falls back to heuristic analysis if the Claude API call fails.
 
 ## How the Agent Works
 
-1. **Capture**: Agent uses `tshark -i any` (host networking) to capture all host network traffic
+1. **Capture**: Agent uses `tshark -i any` (host networking) to capture all host network traffic. tshark runs as root inside the container — this is required for raw packet capture and is standard for any packet analysis tool (Wireshark, tcpdump, etc.)
 2. **Detect**: Custom `AttackDetector` identifies port scans, SYN floods, DNS tunneling, data exfiltration
 3. **Stream Analysis via Claude API**:
    - Packet summaries + alerts are sent to Claude with tool-use capability

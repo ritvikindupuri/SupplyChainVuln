@@ -104,13 +104,13 @@ Lovable-generated apps work especially well because they contain realistic login
 
 ```bash
 # Clone the repo
-git clone https://github.com/ritvikindupuri/packetsentry.git
-cd packetsentry
+git clone https://github.com/ritvikindupuri/PacketSentry.git
+cd PacketSentry
 
-# Set your API key
+# Set your API key (REQUIRED — the agent won't start without it)
 cp .env.example .env
 # Edit .env and set ANTHROPIC_API_KEY=sk-ant-...
-# Optionally change ELASTIC_PASSWORD too
+# Optionally change ELASTIC_PASSWORD too (default: packetsentry)
 
 # Start infrastructure (ES, Kibana, Dashboard, Traffic Engine)
 docker compose up -d
@@ -127,7 +127,7 @@ docker compose logs -f init-setup
 docker compose --profile attack up -d claude-agent
 
 # Open the dashboard
-open http://localhost:5000
+open http://localhost:5000   # macOS: use 'open'; Windows: use 'start' or type URL in browser
 ```
 
 1. **Dashboard opens to setup screen** — enter your custom web app URL (e.g., `http://192.168.1.50:3000` or `http://localhost:8080`)

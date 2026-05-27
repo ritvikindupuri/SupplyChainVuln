@@ -1,183 +1,141 @@
-version: "3.9"
+version: "3.8"
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+networks:
+  packetsentry:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
 
 services:
-  # ── Vulnerable Target Application ──────────────────────
-  vulnerable-app:
-    build: ./vulnerable-app
-    container_name: vuln-app
-    ports:
-      - "8080:8080"
-    environment:
-      - APP_SECRET=supersecretkey123
-      - FLASK_ENV=development
-    cap_add:
-      - SYS_ADMIN
-      - DAC_OVERRIDE
-      - SETUID
-      - SETGID
-    volumes:
-      - /etc/shadow:/etc/host-shadow:ro       # simulated mount of host shadow
-      - /var/run/docker.sock:/var/run/docker.sock:ro  # intentionally exposed
-    security_opt:
-      - seccomp=unconfined
-    networks:
-      - pentest-net
-    restart: unless-stopped
 
-  # ── AI Attacker Agent (Claude-powered) ─────────────────
-  attacker:
-    build: ./attacker
-    container_name: ai-attacker
-    depends_on:
-      - vulnerable-app
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
+    container_name: packetsentry-es
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:?Set ANTHROPIC_API_KEY in .env}
-      - TARGET_URL=http://vulnerable-app:8080
-      - ATTACK_INTERVAL=30
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - VULNERABLE_APP_URL=http://vulnerable-app:8080
+      - discovery.type=single-node
+      - xpack.security.enabled=true
+      - xpack.security.enrollment.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-packetsentry}
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - network.host=0.0.0.0
+      - http.host=0.0.0.0
+      - discovery.seed_hosts=[]
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - es_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    networks:
+      - packetsentry
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "-u", "elastic:${ELASTIC_PASSWORD:-packetsentry}", "http://localhost:9200/_cluster/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 40s
+    logging: *default-logging
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.12.0
+    container_name: packetsentry-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_USERNAME=kibana_system
+      - ELASTICSEARCH_PASSWORD=${ELASTIC_PASSWORD:-packetsentry}
+      - SERVER_BASEPATH=/kibana
+      - SERVER_REWRITEBASEPATH=true
+    networks:
+      - packetsentry
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:5601/api/status"]
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 60s
+    logging: *default-logging
+
+  init-setup:
+    image: alpine/curl:8.12.0
+    container_name: packetsentry-init
+    command: >
+      sh -c "apk add --no-cache jq bash &&
+             bash /init/init.sh"
+    volumes:
+      - ./elasticsearch/init.sh:/init/init.sh:ro
+    networks:
+      - packetsentry
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      - ELASTIC_USER=elastic
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-packetsentry}
+    restart: "no"
+
+  traffic-engine:
+    build: ./traffic-engine
+    container_name: packetsentry-engine
+    environment:
+      - DASHBOARD_URL=http://dashboard:5000
+    networks:
+      - packetsentry
+    restart: unless-stopped
+    logging: *default-logging
+
+  claude-agent:
+    build: ./claude-agent
+    container_name: packetsentry-agent
+    network_mode: "host"
     cap_add:
-      - SYS_PTRACE
       - NET_ADMIN
       - NET_RAW
-    networks:
-      - pentest-net
+      - SYS_ADMIN
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ES_URL=http://127.0.0.1:9200
+      - ELASTIC_USER=elastic
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-packetsentry}
+      - DASHBOARD_URL=http://127.0.0.1:5000
+    volumes:
+      - pcap_storage:/pcaps
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - elasticsearch
+      - traffic-engine
     restart: unless-stopped
+    logging: *default-logging
     profiles:
       - attack
 
-  # ── Falco Runtime Security ────────────────────────────
-  falco:
-    image: falcosecurity/falco-no-driver:latest
-    container_name: falco
-    privileged: true
-    depends_on:
-      - falcosidekick
-    volumes:
-      - /proc:/host/proc:ro
-      - /boot:/host/boot:ro
-      - /lib/modules:/host/lib/modules:ro
-      - /usr:/host/usr:ro
-      - /etc:/host/etc:ro
-      - ./falco/falco.yaml:/etc/falco/falco.yaml:ro
-      - ./falco/falco_rules.yaml:/etc/falco/rules.d/custom-rules.yaml:ro
-    environment:
-      - HOST_ROOT=/host
-      - FALCO_BPF_PROBE=
-    networks:
-      - pentest-net
-    restart: unless-stopped
-
-  # ── Falcosidekick (Event Forwarder) ───────────────────
-  falcosidekick:
-    image: falcosecurity/falcosidekick:latest
-    container_name: falcosidekick
-    depends_on:
-      elasticsearch:
-        condition: service_started
-    environment:
-      - ELASTICSEARCH_HOSTPORT=http://elasticsearch:9200
-      - ELASTICSEARCH_INDEX=falco-events
-      - ELASTICSEARCH_TYPE=event
-      - ELASTICSEARCH_USERNAME=
-      - ELASTICSEARCH_PASSWORD=
-      - ELASTICSEARCH_MUTUALTLS=false
-      - ELASTICSEARCH_CHECKCERT=false
-      - WEBUI_URL=http://0.0.0.0:2802
-      - WEBUI_EXTERNALURL=http://localhost:2802
-    ports:
-      - "2801:2801"
-    networks:
-      - pentest-net
-    restart: unless-stopped
-
-  # ── Elasticsearch ──────────────────────────────────────
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
-    container_name: elasticsearch
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-      - cluster.name=pentest-cluster
-    ports:
-      - "9200:9200"
-    volumes:
-      - es-data:/usr/share/elasticsearch/data
-    networks:
-      - pentest-net
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 30
-
-  # ── Security Dashboard (Reports + Remediation Agent) ──
   dashboard:
     build: ./dashboard
-    container_name: sec-dashboard
-    depends_on:
-      - elasticsearch
-      - vulnerable-app
-    environment:
-      - ELASTICSEARCH_URL=http://elasticsearch:9200
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:?Set ANTHROPIC_API_KEY in .env}
+    container_name: packetsentry-dashboard
     ports:
       - "5000:5000"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    cap_add:
-      - SYS_PTRACE
-    networks:
-      - pentest-net
-    restart: unless-stopped
-
-  # ── Kibana (Falco Dashboard UI) ────────────────────────
-  kibana:
-    image: docker.elastic.co/kibana/kibana:8.12.0
-    container_name: kibana
-    depends_on:
-      - elasticsearch
     environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-      - SERVER_NAME=kibana
-      - SERVER_PUBLICBASEURL=http://localhost:5601
-    ports:
-      - "5601:5601"
-    volumes:
-      - ./kibana/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
+      - ES_URL=http://elasticsearch:9200
+      - ELASTIC_USER=elastic
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-packetsentry}
+      - AGENT_URL=http://172.30.0.1:8000
     networks:
-      - pentest-net
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-s", "-f", "http://localhost:5601/api/status"]
-      interval: 15s
-      timeout: 10s
-      retries: 20
-
-  # ── Auto Setup (Index Templates + Kibana Data Views) ──
-  init-setup:
-    image: curlimages/curl:latest
-    container_name: init-setup
+      - packetsentry
     depends_on:
       elasticsearch:
         condition: service_healthy
-      kibana:
-        condition: service_healthy
-    volumes:
-      - ./elasticsearch/init.sh:/init.sh:ro
-    entrypoint: ["/bin/sh", "/init.sh"]
-    networks:
-      - pentest-net
-    profiles:
-      - setup
-
-networks:
-  pentest-net:
-    driver: bridge
+    restart: unless-stopped
+    logging: *default-logging
 
 volumes:
-  es-data:
+  es_data:
+  pcap_storage:

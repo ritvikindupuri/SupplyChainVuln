@@ -1,156 +1,122 @@
-#!/bin/sh
-# Elasticsearch + Kibana Auto-Setup
-# This runs automatically when phase 1 starts, creating index templates and data views
-# so the user never has to manually configure anything.
+#!/bin/bash
+# PacketSentry - Elasticsearch + Kibana Auto-Setup
 
 set -e
 
 ES_URL="http://elasticsearch:9200"
 KB_URL="http://kibana:5601"
+ES_USER="${ELASTIC_USER:-elastic}"
+ES_PASS="${ELASTIC_PASSWORD:-packetsentry}"
 
-echo "============================================"
-echo "  ContainerSentry Auto-Setup"
-echo "============================================"
-
-# ── Step 1: Wait for Elasticsearch ───────────────────────
-echo ""
-echo "[1/4] Waiting for Elasticsearch..."
-until curl -sf "$ES_URL/_cluster/health" > /dev/null 2>&1; do
-  printf "."
+echo "[+] Waiting for Elasticsearch..."
+until curl -s -u "$ES_USER:$ES_PASS" "$ES_URL/_cluster/health" > /dev/null 2>&1; do
   sleep 3
 done
-echo " READY"
+echo "[+] Elasticsearch is ready."
 
-# ── Step 2: Create Index Templates ───────────────────────
-echo ""
-echo "[2/4] Creating index templates..."
+echo "[+] Setting kibana_system password..."
+curl -s -u "$ES_USER:$ES_PASS" -X POST "$ES_URL/_security/user/kibana_system/_password" \
+  -H "Content-Type: application/json" \
+  -d "{\"password\": \"$ES_PASS\"}" | jq .
+echo "[+] Kibana system password set."
 
-# Template for attack-logs-*
-curl -s -X PUT "$ES_URL/_index_template/attack-logs-template" \
+echo "[+] Creating index template for packetsentry-alerts..."
+curl -s -u "$ES_USER:$ES_PASS" -X PUT "$ES_URL/_index_template/packetsentry_alerts" \
   -H "Content-Type: application/json" \
   -d '{
-  "index_patterns": ["attack-logs-*"],
-  "template": {
-    "settings": { "number_of_shards": 1, "number_of_replicas": 0 },
-    "mappings": {
-      "dynamic_templates": [{
-        "strings_as_keyword": {
-          "match_mapping_type": "string",
-          "mapping": { "type": "keyword", "ignore_above": 512 }
+    "index_patterns": ["packetsentry-alerts-*"],
+    "template": {
+      "settings": { "number_of_shards": 1, "number_of_replicas": 0 },
+      "mappings": {
+        "properties": {
+          "@timestamp":     { "type": "date" },
+          "session":        { "type": "keyword" },
+          "event_type":     { "type": "keyword" },
+          "cycle_id":       { "type": "keyword" },
+          "severity":       { "type": "keyword" },
+          "protocol":       { "type": "keyword" },
+          "src_ip":         { "type": "ip" },
+          "src_port":       { "type": "integer" },
+          "dst_ip":         { "type": "ip" },
+          "dst_port":       { "type": "integer" },
+          "packet_count":   { "type": "integer" },
+          "alert_count":    { "type": "integer" },
+          "threat_level":   { "type": "keyword" },
+          "claude_analysis":{ "type": "text" },
+          "attack_name":    { "type": "keyword" },
+          "mitre_tactic":   { "type": "keyword" },
+          "mitre_technique":{ "type": "keyword" },
+          "remediation":    { "type": "text" },
+          "confidence":     { "type": "float" },
+          "thinking_blocks":{ "type": "text" },
+          "tool_calls":     { "type": "text" },
+          "raw_pcap_ref":   { "type": "keyword" }
         }
-      }],
-      "properties": {
-        "@timestamp":     { "type": "date" },
-        "attack_id":      { "type": "keyword" },
-        "attack_name":    { "type": "text", "fields": { "keyword": { "type": "keyword" } } },
-        "technique":      { "type": "keyword" },
-        "mitre_technique":{ "type": "keyword" },
-        "status":         { "type": "keyword" },
-        "severity":       { "type": "keyword" },
-        "detail":         { "type": "text" },
-        "analysis":       { "type": "text" },
-        "raw_output":     { "type": "text", "index": false },
-        "target":         { "type": "keyword" },
-        "agent":          { "type": "keyword" },
-        "source":         { "type": "keyword" }
       }
     }
-  }
-}' && echo "  ✓ attack-logs template" || echo "  ✗ attack-logs template (may already exist)"
+  }' | jq .
 
-# Template for falco-events-*
-curl -s -X PUT "$ES_URL/_index_template/falco-events-template" \
+echo "[+] Creating index template for packetsentry-packets..."
+curl -s -u "$ES_USER:$ES_PASS" -X PUT "$ES_URL/_index_template/packetsentry_packets" \
   -H "Content-Type: application/json" \
   -d '{
-  "index_patterns": ["falco-events-*"],
-  "template": {
-    "settings": { "number_of_shards": 1, "number_of_replicas": 0 },
-    "mappings": {
-      "dynamic_templates": [{
-        "strings_as_keyword": {
-          "match_mapping_type": "string",
-          "mapping": { "type": "keyword", "ignore_above": 512 }
+    "index_patterns": ["packetsentry-packets-*"],
+    "template": {
+      "settings": { "number_of_shards": 1, "number_of_replicas": 0 },
+      "mappings": {
+        "properties": {
+          "@timestamp":   { "type": "date" },
+          "session":      { "type": "keyword" },
+          "cycle":        { "type": "integer" },
+          "frame_len":    { "type": "integer" },
+          "ip_src":       { "type": "ip" },
+          "ip_dst":       { "type": "ip" },
+          "ip_proto":     { "type": "keyword" },
+          "src_port":     { "type": "integer" },
+          "dst_port":     { "type": "integer" },
+          "protocol":     { "type": "keyword" },
+          "info":         { "type": "text" }
         }
-      }],
-      "properties": {
-        "@timestamp":     { "type": "date" },
-        "rule":           { "type": "text", "fields": { "keyword": { "type": "keyword" } } },
-        "priority":       { "type": "keyword" },
-        "output":         { "type": "text" },
-        "source":         { "type": "keyword" },
-        "hostname":       { "type": "keyword" },
-        "container.id":   { "type": "keyword" },
-        "container.name": { "type": "keyword" },
-        "container.image":{ "type": "keyword" },
-        "proc.name":      { "type": "keyword" },
-        "proc.pid":       { "type": "long" },
-        "proc.cmdline":   { "type": "text", "index": false },
-        "evt.type":       { "type": "keyword" },
-        "fd.name":        { "type": "keyword" },
-        "user.name":      { "type": "keyword" },
-        "tags":           { "type": "keyword" }
       }
     }
-  }
-}' && echo "  ✓ falco-events template" || echo "  ✗ falco-events template (may already exist)"
+  }' | jq .
 
-# ── Step 3: Wait for Kibana ────────────────────────────
-echo ""
-echo "[3/4] Waiting for Kibana..."
-until curl -sf "$KB_URL/api/status" > /dev/null 2>&1; do
-  printf "."
-  sleep 5
+echo "[+] Creating index template for packetsentry-activity..."
+curl -s -u "$ES_USER:$ES_PASS" -X PUT "$ES_URL/_index_template/packetsentry_activity" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "index_patterns": ["packetsentry-activity-*"],
+    "template": {
+      "settings": { "number_of_shards": 1, "number_of_replicas": 0 },
+      "mappings": {
+        "properties": {
+          "@timestamp":   { "type": "date" },
+          "session":      { "type": "keyword" },
+          "event_type":   { "type": "keyword" },
+          "cycle_id":     { "type": "keyword" },
+          "data":         { "type": "object", "enabled": true }
+        }
+      }
+    }
+  }' | jq .
+
+echo "[+] Waiting for Kibana..."
+until curl -s "$KB_URL/api/status" > /dev/null 2>&1; do
+  sleep 3
 done
-# Extra wait for Kibana to fully initialize
-sleep 10
-echo " READY"
+echo "[+] Kibana is ready."
 
-# ── Step 4: Create Kibana Data Views ──────────────────────
-echo ""
-echo "[4/4] Creating Kibana data views..."
-
-# Helper function to create a data view
-create_data_view() {
-  local TITLE="$1"
-  local NAME="$2"
-  local RESPONSE
-  RESPONSE=$(curl -s -X POST "$KB_URL/api/data_views/data_view" \
+echo "[+] Creating Kibana data views..."
+for pair in "packetsentry-alerts-*:PacketSentry Alerts" "packetsentry-packets-*:PacketSentry Packets" "packetsentry-activity-*:PacketSentry Activity"; do
+  pattern="${pair%%:*}"
+  name="${pair##*:}"
+  echo "[+] Creating data view: $name ($pattern)"
+  response=$(curl -s -u "$ES_USER:$ES_PASS" -X POST "$KB_URL/api/data_views/data_view" \
     -H "kbn-xsrf: true" \
     -H "Content-Type: application/json" \
-    -d "{\"data_view\":{\"title\":\"$TITLE\",\"name\":\"$NAME\",\"timeFieldName\":\"@timestamp\"}}" 2>&1)
-  if echo "$RESPONSE" | grep -q '"id"'; then
-    echo "  ✓ $NAME"
-  elif echo "$RESPONSE" | grep -qi "already exists"; then
-    echo "  ~ $NAME (already exists)"
-  else
-    echo "  ✗ $NAME ($RESPONSE)"
-  fi
-}
+    -d "{\"data_view\":{\"title\":\"$pattern\",\"name\":\"$name\",\"timeFieldName\":\"@timestamp\"}}")
+  echo "$response" | head -c 200
+  echo ""
+done
 
-# Important: Set the default timefield for the data views first
-curl -s -X PUT "$KB_URL/api/data_views/default_timefield" \
-  -H "kbn-xsrf: true" \
-  -H "Content-Type: application/json" \
-  -d '{"timeFieldName": "@timestamp"}' > /dev/null 2>&1 || true
-
-# Create data views (even though no indices exist yet — Kibana 8.12 allows this)
-create_data_view "attack-logs-*" "Attack Logs"
-create_data_view "falco-events-*" "Falco Events"
-
-# Set "Attack Logs" as the default data view so Discover opens to it first
-sleep 2
-
-echo ""
-echo "============================================"
-echo "  Setup Complete!"
-echo ""
-echo "  Access your dashboards:"
-echo "  Security Dashboard:  http://localhost:5000"
-echo "  Kibana:              http://localhost:5601"
-echo "  Web App:             http://localhost:8080"
-echo "  Falcosidekick UI:    http://localhost:2802"
-echo "  Elasticsearch API:   http://localhost:9200"
-echo ""
-echo "  Phase 2:"
-echo "  docker compose --profile attack up -d attacker"
-echo "============================================"
+echo "[+] Setup complete."

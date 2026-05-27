@@ -1,207 +1,496 @@
 import os
 import json
 import time
+import queue
 import uuid
 import threading
+import socket
+import ipaddress
 import requests
-from flask import Flask, render_template, jsonify, request, Response, stream_with_context
+from datetime import datetime
+from urllib.parse import urlparse
+from flask import Flask, render_template, Response, request, jsonify, stream_with_context, send_file
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 
-ELASTICSEARCH_URL = os.environ.get("ELASTICSEARCH_URL", "http://elasticsearch:9200")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+ES_URL = os.getenv("ES_URL", "http://elasticsearch:9200")
+ES_USER = os.getenv("ELASTIC_USER", "elastic")
+ES_PASS = os.getenv("ELASTIC_PASSWORD", "packetsentry")
+AGENT_URL = os.getenv("AGENT_URL", "http://172.30.0.1:8000")
+ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
-remediation_sessions = {}
-attack_cache = []
+CUSTOM_TARGET = ""
 
+BLOCKED_DOMAINS = {
+    "google.com", "youtube.com", "facebook.com", "instagram.com", "twitter.com", "x.com",
+    "linkedin.com", "reddit.com", "amazon.com", "apple.com", "microsoft.com",
+    "netflix.com", "spotify.com", "whatsapp.com", "telegram.org", "discord.com",
+    "slack.com", "stackoverflow.com", "wikipedia.org", "github.com", "gitlab.com",
+    "docker.com", "nginx.org", "apache.org", "python.org", "nodejs.org",
+}
 
-def fetch_attack_logs():
+def resolve_to_private_ip(hostname):
     try:
-        r = requests.get("%s/attack-logs-*/_search?sort=@timestamp:desc&size=100&ignore_unavailable=true" % ELASTICSEARCH_URL, timeout=10)
-        if r.status_code in (200, 404):
-            data = r.json() if r.status_code == 200 else {"hits": {"hits": []}}
-            hits = data.get("hits", {}).get("hits", [])
-            return [h["_source"] for h in hits]
-    except requests.exceptions.ConnectionError:
+        ip = ipaddress.ip_address(hostname)
+        return ip.is_private or ip.is_loopback, False
+    except ValueError:
         pass
-    except Exception:
-        pass
-    return []
-
-
-def enrich_severity(attack_name, technique, status):
-    critical_keywords = ["docker_socket_abuse", "cap_sys_admin_escape", "cgroup_escape", "privileged_container"]
-    high_keywords = ["procfs_host_read", "volume_mount_traversal", "seccomp_bypass"]
-    if technique in critical_keywords or "escape" in (attack_name or "").lower():
-        return "critical"
-    if technique in high_keywords:
-        return "high"
-    if status == "success":
-        return "high"
-    return "medium"
-
-
-@app.route("/")
-def dashboard():
-    return render_template("dashboard.html")
-
-
-@app.route("/api/attacks")
-def api_attacks():
-    logs = fetch_attack_logs()
-    for log in logs:
-        if "severity" not in log:
-            log["severity"] = enrich_severity(log.get("attack_name"), log.get("technique"), log.get("status"))
-    return jsonify(logs)
-
-
-@app.route("/api/attacks/<attack_id>")
-def api_attack_detail(attack_id):
     try:
-        r = requests.get("%s/attack-logs-*/_search?q=attack_id:%s" % (ELASTICSEARCH_URL, attack_id), timeout=10)
-        if r.status_code == 200:
-            hits = r.json().get("hits", {}).get("hits", [])
-            if hits:
-                return jsonify(hits[0]["_source"])
+        addrs = socket.getaddrinfo(hostname, None)
+        for addr in addrs:
+            try:
+                ip = ipaddress.ip_address(addr[4][0])
+                if ip.is_private or ip.is_loopback:
+                    return True, False
+            except:
+                continue
+        return False, True
+    except:
+        return False, False
+
+def generate_allow_reason(url, hostname, is_private):
+    if is_private:
+        try:
+            ip = ipaddress.ip_address(hostname)
+            return f"Target resolves to private IP ({hostname}) — this is a local/custom application on your network."
+        except:
+            return f"Target ({hostname}) is on a private/local network — confirmed as a custom application."
+    stripped = hostname.lower().removeprefix("www.")
+    domain_parts = stripped.split(".")
+    if len(domain_parts) >= 2:
+        domain = ".".join(domain_parts[-2:])
+    else:
+        domain = hostname
+    platforms = {"netlify.app": "Netlify", "vercel.app": "Vercel", "pages.dev": "Cloudflare Pages",
+                 "github.io": "GitHub Pages", "render.com": "Render", "fly.dev": "Fly.io",
+                 "railway.app": "Railway", "cyclic.app": "Cyclic", "replit.app": "Replit"}
+    platform = next((v for k, v in platforms.items() if hostname.endswith(k) or hostname.endswith("." + k)), None)
+    if platform:
+        return f"Domain ({stripped}) is hosted on {platform} — a custom application hosting platform. Not on the blocked sites list."
+    return f"Domain ({stripped}) is not on the blocked sites list. Appears to be a custom application you own."
+
+def validate_target_url(url):
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        return False, "URL must use HTTP or HTTPS scheme", ""
+    hostname = (parsed.hostname or "").lower()
+    if not hostname:
+        return False, "Invalid URL: no hostname", ""
+
+    is_private, resolved = resolve_to_private_ip(hostname)
+    if is_private:
+        return True, generate_allow_reason(url, hostname, True), ""
+
+    stripped = hostname.removeprefix("www.")
+    if stripped in BLOCKED_DOMAINS:
+        return False, f"Public website blocked ({stripped}). Only custom/internal applications are allowed.", ""
+
+    domain_parts = stripped.split(".")
+    if len(domain_parts) >= 2:
+        domain = ".".join(domain_parts[-2:])
+        if domain in BLOCKED_DOMAINS:
+            return False, f"Public website blocked ({domain}). Only custom/internal applications are allowed.", ""
+
+    return True, generate_allow_reason(url, hostname, False), ""
+
+from report_generator import ReportGenerator, REPORTS_DIR
+report_gen = ReportGenerator(ES_URL, ES_USER, ES_PASS, ANTHROPIC_KEY)
+
+def _report_status_path(report_id):
+    return os.path.join(REPORTS_DIR, f"{report_id}.status.json")
+
+def _write_report_status(report_id, data):
+    try:
+        with open(_report_status_path(report_id), "w") as f:
+            json.dump(data, f)
     except:
         pass
-    return jsonify({"error": "not found"}), 404
 
+def _read_report_status(report_id):
+    try:
+        with open(_report_status_path(report_id), "r") as f:
+            return json.load(f)
+    except:
+        return None
 
-@app.route("/api/report/download")
-def download_report():
-    from report_generator import generate_report
-    logs = fetch_attack_logs()
-    for log in logs:
-        if "severity" not in log:
-            log["severity"] = enrich_severity(log.get("attack_name"), log.get("technique"), log.get("status"))
-    html, report_id = generate_report(logs)
-    return Response(html, mimetype="text/html",
-                    headers={"Content-Disposition": "attachment; filename=security-report-%s.html" % report_id})
+event_queue = queue.Queue(maxsize=2000)
+agent_status = {"status": "starting", "message": "Waiting for agent connection..."}
 
+alerts = []
+analysis_history = []
+packet_buffer = []
+thinking_buffer = []
+command_history = []
+activity_feed = []
 
-@app.route("/api/report/json")
-def download_report_json():
-    logs = fetch_attack_logs()
-    report = {
-        "report_id": "CR-%s" % int(time.time()),
-        "generated_at": time.time(),
-        "total_attacks": len(logs),
-        "attacks": logs
-    }
-    return jsonify(report)
+@app.route("/")
+def index():
+    return render_template("dashboard.html")
 
+@app.route("/api/setup/target", methods=["POST"])
+def setup_target():
+    global CUSTOM_TARGET
+    data = request.json or {}
+    url = data.get("url", "").strip()
+    if not url:
+        return jsonify({"ok": False, "error": "No URL provided"}), 400
+    valid, message, _ = validate_target_url(url)
+    if not valid:
+        return jsonify({"ok": False, "error": message}), 400
+    CUSTOM_TARGET = url
+    try:
+        requests.post(f"{AGENT_URL}/api/setup/target", json={"url": url}, timeout=3)
+    except:
+        pass
+    return jsonify({"ok": True, "target": url, "reason": message})
 
-@app.route("/api/remediation/plan", methods=["POST"])
-def remediation_plan():
-    from remediation_agent import generate_remediation_plan
-    data = request.get_json(silent=True) or {}
-    technique = data.get("technique", "all")
-    plan = generate_remediation_plan(technique)
-    if plan:
-        return jsonify(plan)
-    return jsonify({"error": "Unknown technique"}), 400
+@app.route("/api/reset", methods=["POST"])
+def reset_data():
+    global alerts, packet_buffer, thinking_buffer, command_history, analysis_history, activity_feed
+    alerts.clear()
+    packet_buffer.clear()
+    thinking_buffer.clear()
+    command_history.clear()
+    analysis_history.clear()
+    activity_feed.clear()
+    agent_status["status"] = "waiting"
+    agent_status["message"] = "Dashboard reset — awaiting new data"
+    try:
+        requests.post(f"{AGENT_URL}/api/reset", timeout=3)
+    except:
+        pass
+    try:
+        while not event_queue.empty():
+            event_queue.get_nowait()
+    except:
+        pass
+    return jsonify({"ok": True})
 
+@app.route("/api/target")
+def get_target():
+    return jsonify({"url": CUSTOM_TARGET or ""})
 
-@app.route("/api/remediation/execute", methods=["POST"])
-def remediation_execute():
-    from remediation_agent import execute_command, generate_remediation_plan
-    data = request.get_json(silent=True) or {}
-    technique = data.get("technique", "all")
-    session_id = str(uuid.uuid4())
+@app.route("/api/events", methods=["POST"])
+def receive_event():
+    data = request.json
+    if not data:
+        return jsonify({"ok": False, "error": "no data"}), 400
 
-    plan = generate_remediation_plan(technique)
-    if not plan:
-        return jsonify({"error": "Unknown technique"}), 400
+    event_type = data.get("type", "unknown")
+    event_data = data.get("data", {})
+    ts = data.get("timestamp", datetime.utcnow().isoformat())
 
-    steps = plan["steps"]
-    if not steps:
-        return jsonify({"error": "No steps in plan"}), 400
+    try:
+        event_queue.put_nowait(data)
+    except queue.Full:
+        pass
 
-    def run_remediation():
-        session = remediation_sessions.get(session_id, {"status": "running", "steps": []})
-        for i, step in enumerate(steps):
-            cmd = step["command"]
-            desc = step["description"]
+    if event_type == "agent_status":
+        agent_status.update(event_data)
+        agent_status["last_seen"] = ts
+        add_activity("agent_status", event_data, ts)
 
-            thinking = "Analyzing step %d/%d: %s\nChecking current state with: %s" % (i+1, len(steps), desc, cmd)
-            session["steps"].append({
-                "step": i+1,
-                "total": len(steps),
-                "description": desc,
-                "thinking": thinking,
-                "command": cmd,
-                "output": "",
-                "status": "running"
-            })
-            remediation_sessions[session_id] = session
+    elif event_type == "alert":
+        event_data["timestamp"] = ts
+        alerts.insert(0, event_data)
+        if len(alerts) > 200:
+            alerts.pop()
+        add_activity("alert", event_data, ts)
 
-            result = execute_command(cmd)
-            session["steps"][-1]["output"] = result.get("output", "")
-            session["steps"][-1]["exit_code"] = result.get("exit_code", -1)
-            session["steps"][-1]["status"] = "success" if result.get("exit_code") == 0 else "failed"
+    elif event_type == "agent_think":
+        thinking_buffer.append({**event_data, "timestamp": ts})
+        if len(thinking_buffer) > 500:
+            thinking_buffer.pop(0)
 
-            if result.get("error"):
-                session["steps"][-1]["error"] = result["error"]
+    elif event_type == "agent_command":
+        command_history.append({**event_data, "timestamp": ts, "status": "executing", "output": ""})
+        if len(command_history) > 100:
+            command_history.pop(0)
+        add_activity("command", event_data, ts)
 
-            remediation_sessions[session_id] = session
-            time.sleep(0.5)
+    elif event_type == "agent_command_output":
+        if command_history:
+            cmd = command_history[0]
+            for c in command_history:
+                if c.get("tool_id") == event_data.get("tool_id") or c.get("command") == event_data.get("command"):
+                    c["output"] = event_data.get("output", "")
+                    c["status"] = "complete"
+                    break
+        add_activity("command_output", event_data, ts)
 
-        session["status"] = "completed"
-        remediation_sessions[session_id] = session
+    elif event_type == "agent_cycle_start":
+        add_activity("cycle_start", event_data, ts)
 
-    thread = threading.Thread(target=run_remediation, daemon=True)
-    thread.start()
+    elif event_type == "agent_cycle_complete":
+        analysis_history.insert(0, {"data": event_data, "timestamp": ts})
+        if len(analysis_history) > 100:
+            analysis_history.pop()
+        add_activity("cycle_complete", event_data, ts)
 
-    return jsonify({"session_id": session_id, "total_steps": len(steps)})
+    elif event_type == "analysis_cycle":
+        analysis_history.insert(0, {"data": event_data, "timestamp": ts})
+        if len(analysis_history) > 100:
+            analysis_history.pop()
+        if event_data.get("sample_packets"):
+            for p in event_data["sample_packets"][-5:]:
+                packet_buffer.append({**p, "arrived": ts})
+        if len(packet_buffer) > 500:
+            packet_buffer = packet_buffer[-500:]
 
+    elif event_type == "heartbeat":
+        pass
 
-@app.route("/api/remediation/stream/<session_id>")
-def remediation_stream(session_id):
+    return jsonify({"ok": True})
+
+def add_activity(atype, data, ts):
+    activity_feed.insert(0, {"type": atype, "data": data, "timestamp": ts})
+    if len(activity_feed) > 200:
+        activity_feed.pop()
+
+@app.route("/api/events/stream")
+def event_stream():
+    recent_events = []
+
     def generate():
-        last_count = 0
         while True:
-            session = remediation_sessions.get(session_id, {})
-            if not session:
-                yield "data: %s\n\n" % json.dumps({"error": "Session not found"})
-                break
-
-            steps = session.get("steps", [])
-            if len(steps) > last_count:
-                new_steps = steps[last_count:]
-                for s in new_steps:
-                    yield "data: %s\n\n" % json.dumps(s)
-                last_count = len(steps)
-
-            if session.get("status") == "completed" and len(steps) == last_count:
-                yield "data: %s\n\n" % json.dumps({"status": "completed", "step": -1})
-                break
-
-            time.sleep(0.3)
+            try:
+                event = event_queue.get(timeout=25)
+                recent_events.append(event)
+                if len(recent_events) > 50:
+                    recent_events.pop(0)
+                yield f"data: {json.dumps(event)}\n\n"
+            except queue.Empty:
+                yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': datetime.utcnow().isoformat()})}\n\n"
 
     return Response(stream_with_context(generate()), mimetype="text/event-stream")
 
+@app.route("/api/status")
+def get_status():
+    return jsonify({
+        "agent": agent_status,
+        "alert_count": len(alerts),
+        "analysis_count": len(analysis_history),
+        "thinking_buffer_size": len(thinking_buffer),
+        "command_count": len(command_history),
+        "recent_alerts": alerts[:10],
+        "last_updated": datetime.utcnow().isoformat()
+    })
 
-@app.route("/api/remediation/session/<session_id>")
-def remediation_session(session_id):
-    session = remediation_sessions.get(session_id, {"error": "not found"})
-    return jsonify(session)
+@app.route("/api/alerts")
+def get_alerts():
+    severity = request.args.get("severity", "")
+    limit = int(request.args.get("limit", 50))
+    if severity:
+        filtered = [a for a in alerts if a.get("severity") == severity]
+        return jsonify(filtered[:limit])
+    return jsonify(alerts[:limit])
 
+@app.route("/api/thinking")
+def get_thinking():
+    cycle_id = request.args.get("cycle_id", "")
+    if cycle_id:
+        filtered = [t for t in thinking_buffer if t.get("cycle_id") == cycle_id]
+        return jsonify(filtered)
+    return jsonify(thinking_buffer[-100:])
 
-@app.route("/api/remediation/claude", methods=["POST"])
-def remediation_claude():
-    from remediation_agent import call_claude_remediation
-    data = request.get_json(silent=True) or {}
-    attack_data = data.get("attack_data", {})
-    context = data.get("context", "")
-    analysis = call_claude_remediation(attack_data, context)
-    return jsonify({"analysis": analysis or "Claude remediation unavailable"})
+@app.route("/api/commands")
+def get_commands():
+    limit = int(request.args.get("limit", 50))
+    return jsonify(command_history[:limit])
 
+@app.route("/api/analyses")
+def get_analyses():
+    return jsonify(analysis_history[:20])
 
-@app.route("/api/health")
-def health():
-    return jsonify({"status": "ok"})
+@app.route("/api/activity")
+def get_activity():
+    limit = int(request.args.get("limit", 50))
+    return jsonify(activity_feed[:limit])
 
+@app.route("/api/ask", methods=["POST"])
+def ask_agent():
+    question = request.json.get("question", "")
+    if not question:
+        return jsonify({"error": "No question provided"}), 400
+
+    push_to_agent("agent_query", {"question": question, "timestamp": datetime.utcnow().isoformat()})
+
+    try:
+        r = requests.post(
+            f"{AGENT_URL}/api/query",
+            json={"question": question},
+            timeout=45
+        )
+        return jsonify(r.json())
+    except requests.exceptions.ConnectionError:
+        return jsonify({
+            "answer": "Agent is running on host network. Analysis continues autonomously. Your question will be queued for the next analysis cycle."
+        })
+    except requests.exceptions.Timeout:
+        return jsonify({"answer": "Agent is busy analyzing traffic. Please try again shortly."})
+    except Exception as e:
+        return jsonify({"answer": f"Query error: {str(e)[:100]}"})
+
+def push_to_agent(event_type, data):
+    try:
+        requests.post(f"{AGENT_URL}/api/events", json={"type": event_type, "data": data}, timeout=2)
+    except:
+        pass
+
+@app.route("/api/packets/recent")
+def recent_packets():
+    limit = int(request.args.get("limit", 100))
+    query = {"query": {"match_all": {}}, "size": limit, "sort": [{"@timestamp": "desc"}]}
+    try:
+        r = requests.get(f"{ES_URL}/packetsentry-packets-*/_search", json=query, auth=(ES_USER, ES_PASS), timeout=5)
+        hits = r.json().get("hits", {}).get("hits", [])
+        packets = []
+        for h in hits:
+            src = h.get("_source", {})
+            src["_id"] = h.get("_id")
+            packets.append(src)
+        return jsonify(packets)
+    except:
+        return jsonify([])
+
+@app.route("/api/search/packets")
+def search_packets():
+    ip = request.args.get("ip", "")
+    protocol = request.args.get("protocol", "")
+    port = request.args.get("port", "")
+    must = []
+    if ip:
+        must.append({"multi_match": {"query": ip, "fields": ["ip_src", "ip_dst"]}})
+    if protocol:
+        must.append({"term": {"protocol": protocol.lower()}})
+    if port:
+        must.append({"multi_match": {"query": port, "fields": ["src_port", "dst_port"]}})
+    query = {"query": {"bool": {"must": must if must else [{"match_all": {}}]}},
+             "size": 50, "sort": [{"@timestamp": "desc"}]}
+    try:
+        r = requests.get(f"{ES_URL}/packetsentry-packets-*/_search", json=query, auth=(ES_USER, ES_PASS), timeout=5)
+        hits = r.json().get("hits", {}).get("hits", [])
+        packets = []
+        for h in hits:
+            src = h.get("_source", {})
+            src["_id"] = h.get("_id")
+            packets.append(src)
+        return jsonify(packets)
+    except:
+        return jsonify([])
+
+@app.route("/api/stats")
+def get_stats():
+    alert_total = 0
+    packet_total = 0
+    activity_total = 0
+    try:
+        r = requests.get(f"{ES_URL}/packetsentry-alerts-*/_count", auth=(ES_USER, ES_PASS), timeout=5)
+        alert_total = r.json().get("count", 0)
+    except:
+        pass
+    try:
+        r = requests.get(f"{ES_URL}/packetsentry-packets-*/_count", auth=(ES_USER, ES_PASS), timeout=5)
+        packet_total = r.json().get("count", 0)
+    except:
+        pass
+    try:
+        r = requests.get(f"{ES_URL}/packetsentry-activity-*/_count", auth=(ES_USER, ES_PASS), timeout=5)
+        activity_total = r.json().get("count", 0)
+    except:
+        pass
+
+    severity_counts = {"low": 0, "medium": 0, "high": 0, "critical": 0}
+    for a in alerts:
+        sev = a.get("severity", "low")
+        if sev in severity_counts:
+            severity_counts[sev] += 1
+
+    return jsonify({
+        "total_alerts": alert_total,
+        "total_packets": packet_total,
+        "total_activities": activity_total,
+        "session_alerts": len(alerts),
+        "severity_breakdown": severity_counts,
+        "agent_status": agent_status.get("status", "unknown"),
+        "agent_message": agent_status.get("message", ""),
+        "thinking_blocks": len(thinking_buffer),
+        "commands_executed": len(command_history),
+        "target_url": CUSTOM_TARGET,
+    })
+
+@app.route("/api/report/generate", methods=["POST"])
+def generate_report():
+    report_id = uuid.uuid4().hex[:12]
+    _write_report_status(report_id, {"status": "generating", "progress": 0})
+
+    def gen_task():
+        try:
+            _write_report_status(report_id, {"status": "generating", "progress": 10})
+            time.sleep(1)
+            _write_report_status(report_id, {"status": "generating", "progress": 30})
+            path = report_gen.generate(report_id, target_url=CUSTOM_TARGET)
+            if path and os.path.exists(path):
+                _write_report_status(report_id, {"status": "complete", "progress": 100, "path": path})
+            else:
+                _write_report_status(report_id, {"status": "error", "progress": 0, "error": "Report file was not created"})
+        except Exception as e:
+            _write_report_status(report_id, {"status": "error", "progress": 0, "error": str(e)})
+
+    t = threading.Thread(target=gen_task, daemon=True)
+    t.start()
+
+    return jsonify({"report_id": report_id, "status": "generating"})
+
+@app.route("/api/report/status/<report_id>")
+def report_status(report_id):
+    r = _read_report_status(report_id)
+    if not r:
+        return jsonify({"status": "not_found"}), 404
+    return jsonify(r)
+
+@app.route("/api/report/download/<report_id>")
+def download_report(report_id):
+    r = _read_report_status(report_id)
+    if not r or r.get("status") != "complete":
+        return jsonify({"error": "Report not ready"}), 404
+    path = r.get("path")
+    if not path or not os.path.exists(path):
+        return jsonify({"error": "File not found"}), 404
+    return send_file(path, as_attachment=True, download_name=f"packetsentry-report-{report_id}.pdf", mimetype="application/pdf")
+
+@app.route("/kibana/", defaults={"path": ""})
+@app.route("/kibana/<path:path>")
+def kibana_proxy(path):
+    prefix = "kibana"
+    target = f"http://kibana:5601/{prefix}/{path}" if path else f"http://kibana:5601/{prefix}/"
+    qs = request.query_string.decode() if request.query_string else ""
+    if qs:
+        target += "?" + qs
+    headers = {k: v for k, v in request.headers if k.lower() not in ("host", "content-length")}
+    try:
+        resp = requests.request(
+            method=request.method,
+            url=target,
+            headers=headers,
+            data=request.get_data(),
+            cookies=request.cookies,
+            stream=True,
+            timeout=30,
+            allow_redirects=False,
+        )
+        excluded = {"content-encoding", "content-length", "transfer-encoding", "connection"}
+        proxy_headers = {k: v for k, v in resp.headers.items() if k.lower() not in excluded}
+        return Response(
+            resp.iter_content(chunk_size=8192),
+            status=resp.status_code,
+            headers=proxy_headers,
+        )
+    except Exception as e:
+        return f"Kibana proxy error: {e}", 502
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True, threaded=True)
+    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)

@@ -3,654 +3,1235 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ContainerSentry Dashboard — Attack Analysis & Remediation</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<title>PacketSentry — Autonomous Penetration Testing</title>
 <style>
-:root {
-  --bg: #070b14;
-  --bg2: #0c1424;
-  --bg3: #111d35;
-  --panel: #0a1225;
-  --border: #1a2d4a;
-  --border2: #243b5e;
-  --accent: #00d4ff;
-  --accent2: #ff3355;
-  --accent3: #00ff88;
-  --accent4: #ffaa00;
-  --purple: #8b5cf6;
-  --text: #c8dcea;
-  --text2: #6a8fa8;
-  --text3: #3a5060;
-}
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'Inter', sans-serif;
-  min-height: 100vh;
-  overflow-x: hidden;
-}
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: var(--bg2); }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-.nav {
-  background: var(--bg2);
-  border-bottom: 1px solid var(--border);
-  padding: 12px 24px;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-}
-.nav h1 { font-size: 16px; font-weight: 700; color: var(--accent); letter-spacing: 1px; }
-.nav h1 span { color: var(--accent2); }
-.nav a { color: var(--text2); text-decoration: none; font-size: 13px; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
-.nav a:hover, .nav a.active { background: var(--bg3); color: var(--text); }
-.nav .badge { background: var(--accent2); color: #fff; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 600; margin-left: 4px; }
-.container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI','SF Pro Display',system-ui,sans-serif;background:#080c14;color:#c8d0d8;min-height:100vh;overflow-x:hidden}
 
-/* Stats bar */
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
-.stat { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
-.stat .num { font-size: 28px; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
-.stat .label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
-.stat.critical .num { color: var(--accent2); }
-.stat.high .num { color: var(--accent4); }
-.stat.success .num { color: var(--accent3); }
-.stat.total .num { color: var(--accent); }
+/* Scrollbar */
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:#0a0e17}
+::-webkit-scrollbar-thumb{background:#1a2a3a;border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#2a3a4a}
 
-/* Sections */
-.section { margin-bottom: 24px; }
-.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-.section-header h2 { font-size: 18px; font-weight: 600; }
-.btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; }
-.btn-primary { background: var(--accent); color: #000; }
-.btn-primary:hover { background: #00e5ff; box-shadow: 0 0 20px rgba(0,212,255,0.3); }
-.btn-danger { background: var(--accent2); color: #fff; }
-.btn-danger:hover { background: #ff4466; box-shadow: 0 0 20px rgba(255,51,85,0.3); }
-.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
-.btn-outline:hover { border-color: var(--accent); color: var(--accent); }
-.btn-sm { padding: 5px 10px; font-size: 11px; }
-.btn-group { display: flex; gap: 8px; }
+/* Header */
+.header{background:linear-gradient(135deg,#0c1220,#141e30);border-bottom:1px solid #1a2a3f;padding:14px 24px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100}
+.header-left{display:flex;align-items:center;gap:16px}
+.header h1{font-size:20px;font-weight:700;background:linear-gradient(90deg,#00b4ff,#0090ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:1px}
+.header h1 span{font-weight:300;background:linear-gradient(90deg,#5a7a8a,#3a5a6a);-webkit-background-clip:text}
+.header-right{display:flex;align-items:center;gap:20px}
+.status-pill{display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:20px;font-size:12px;background:#0f1828;border:1px solid #1a2a3f}
+.quick-links{display:flex;align-items:center;gap:6px}
+.quick-link{padding:5px 12px;border-radius:6px;font-size:11px;color:#5a7a9a;text-decoration:none;border:1px solid #1a2a3f;background:#0f1828;transition:all .15s;display:flex;align-items:center;gap:5px}
+.quick-link:hover{background:#1a2a3f;color:#5ab0ff;border-color:#2a4a6f}
+.quick-link.es{color:#fec514}
+.quick-link.es:hover{color:#ffd844;border-color:#fec51444}
+.quick-link.kibana{color:#e8488b}
+.quick-link.kibana:hover{color:#ff6ba3;border-color:#e8488b44}
+.status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.status-dot.running{background:#00e676;animation:pulse 2s infinite}
+.status-dot.analyzing{background:#ffab00;animation:pulse 1s infinite}
+.status-dot.error{background:#ff1744}
+.status-dot.starting{background:#448aff;animation:pulse 1.5s infinite}
+@keyframes pulse{0%{opacity:1;box-shadow:0 0 0 0 currentColor44}50%{opacity:.8;box-shadow:0 0 0 6px currentColor00}100%{opacity:1}}
+.session-badge{padding:4px 10px;background:#0f1828;border-radius:6px;font-size:10px;color:#4a6a7a;font-family:monospace}
 
-/* Tables */
-.table-wrap { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th { background: var(--bg2); padding: 10px 14px; text-align: left; font-weight: 600; color: var(--text2); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
-td { padding: 10px 14px; border-bottom: 1px solid var(--border2); }
-tr:last-child td { border-bottom: none; }
-tr:hover { background: var(--bg2); }
-.tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; }
-.tag.critical { background: rgba(255,51,85,0.15); color: var(--accent2); }
-.tag.high { background: rgba(255,170,0,0.15); color: var(--accent4); }
-.tag.medium { background: rgba(0,212,255,0.15); color: var(--accent); }
-.tag.low { background: rgba(0,255,136,0.15); color: var(--accent3); }
-.tag.success { background: rgba(0,255,136,0.15); color: var(--accent3); }
-.tag.failed { background: rgba(255,51,85,0.15); color: var(--accent2); }
-.tag.running { background: rgba(139,92,246,0.15); color: var(--purple); }
+/* Layout */
+.container{display:grid;grid-template-columns:240px 1fr;height:calc(100vh - 54px)}
+.sidebar{background:#0a0f1a;border-right:1px solid #141e2a;padding:16px;overflow-y:auto}
+.sidebar-header{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#3a4a5a;margin-bottom:12px;font-weight:600}
+.stat-card{background:#0f1729;border:1px solid #162030;border-radius:8px;padding:12px;margin-bottom:8px;cursor:help;position:relative}
+.stat-card[data-tip]:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#141e30;color:#c8d0d8;padding:8px 12px;border-radius:6px;font-size:11px;line-height:1.4;white-space:normal;max-width:300px;box-shadow:0 4px 12px rgba(0,0,0,0.5);border:1px solid #2a3a4f;pointer-events:none;z-index:1000;opacity:0;transition:opacity .2s}
+.stat-card[data-tip]:hover::after{opacity:1}
+.stat-card .label{font-size:10px;text-transform:uppercase;color:#4a5a6a;letter-spacing:.5px}
+.stat-card .value{font-size:22px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums;display:flex;align-items:baseline;gap:4px}
+.stat-card .value .unit{font-size:11px;color:#7a9aaa;font-weight:400}
+.stat-card .value.green{color:#00e676}
+.stat-card .value.red{color:#ff1744}
+.stat-card .value.yellow{color:#ffab00}
+.stat-card .value.blue{color:#448aff}
+.stat-card .value.cyan{color:#00bcd4}
+.stat-sub{font-size:10px;color:#3a4a5a;margin-top:2px}
 
-/* Detail panel */
-.detail-panel { display: none; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin-top: 12px; }
-.detail-panel.open { display: block; }
-.detail-panel h3 { font-size: 16px; margin-bottom: 12px; }
-.detail-panel .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 16px; }
-.detail-panel .meta-item { background: var(--bg2); padding: 10px; border-radius: 6px; }
-.detail-panel .meta-item .lbl { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; }
-.detail-panel .meta-item .val { font-size: 13px; font-weight: 500; margin-top: 2px; }
-.detail-panel pre { background: var(--bg); padding: 12px; border-radius: 6px; font-family: 'JetBrains Mono', monospace; font-size: 12px; overflow-x: auto; max-height: 400px; }
-.detail-panel .analysis { background: var(--bg2); border-left: 3px solid var(--purple); padding: 12px 16px; margin: 12px 0; border-radius: 0 6px 6px 0; }
+/* Main Content */
+.main{padding:16px;overflow-y:auto}
+.tabs{display:flex;gap:2px;margin-bottom:16px;background:#0a0f1a;border-radius:8px;padding:3px;border:1px solid #141e2a}
+.tab{flex:1;padding:8px 12px;text-align:center;border-radius:6px;cursor:pointer;font-size:12px;color:#5a6a7a;transition:all .15s;border:none;background:transparent;font-weight:500}
+.tab:hover{color:#8a9aaa;background:#0f1729}
+.tab.active{background:#141e30;color:#5ab0ff;font-weight:600}
+.tab.disabled{opacity:.35;cursor:not-allowed;pointer-events:none}
+.tab .badge{display:inline-block;background:#ff174422;color:#ff1744;font-size:9px;padding:1px 6px;border-radius:8px;margin-left:4px;font-weight:700}
 
-/* Remediation section */
-.remediation-panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
-.remediation-panel h3 { font-size: 16px; margin-bottom: 12px; }
+.panel{display:none}
+.panel.active{display:block}
 
-.step-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 14px; margin: 8px 0; }
-.step-card .step-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-.step-card .step-num { font-size: 11px; color: var(--text2); font-weight: 600; }
-.step-card .step-desc { font-size: 13px; font-weight: 500; }
-.step-card pre { background: var(--bg); padding: 8px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 11px; margin: 6px 0; overflow-x: auto; }
-.step-card .output { margin-top: 8px; }
-.step-card .output pre { background: #0a1a0a; border: 1px solid #1a3a1a; color: var(--accent3); }
-.step-card .output .error { background: #1a0a0a; border: 1px solid #3a1a1a; color: var(--accent2); }
-.step-card .thinking { background: #0a0a1a; border-left: 3px solid var(--purple); padding: 8px 12px; font-size: 11px; margin: 6px 0; border-radius: 0 4px 4px 0; color: var(--text2); }
+/* Agent Console */
+.console-container{background:#080c14;border:1px solid #141e2a;border-radius:8px;min-height:500px;padding:0}
+.console-header{display:flex;justify-content:space-between;align-items:center;padding:10px 16px;border-bottom:1px solid #141e2a;background:#0a0f1a}
+.console-header .label{font-size:11px;color:#4a6a7a;font-weight:600}
+.console-header .controls{display:flex;gap:8px}
+.console-header .controls button{background:#0f1729;border:1px solid #1a2a3f;color:#5a6a7a;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:10px}
+.console-header .controls button:hover{background:#1a2a3f;color:#8a9aaa}
+.console-body{padding:12px;max-height:600px;overflow-y:auto;font-family:'SF Mono','Fira Code','Cascadia Code','Consolas',monospace;font-size:12px;line-height:1.6}
 
-.progress-bar { height: 4px; background: var(--border); border-radius: 2px; margin: 12px 0; overflow: hidden; }
-.progress-bar .fill { height: 100%; background: var(--accent3); border-radius: 2px; transition: width 0.5s; }
+/* Thinking block */
+.think-block{margin-bottom:8px;padding:6px 10px;border-left:2px solid #00b4ff33;animation:fadeSlide .3s}
+.think-block .think-text{color:#8ab4d8;white-space:pre-wrap}
+.think-block .think-text .highlight{color:#00b4ff;font-weight:600}
+.think-block .think-text .alert-text{color:#ff6b6b}
+.think-block .think-text .cmd-text{color:#ffab00}
 
-/* Search / Filter */
-.filter-bar { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; flex-wrap: wrap; }
-.filter-bar input { background: var(--bg2); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 12px; flex: 1; min-width: 200px; }
-.filter-bar input:focus { outline: none; border-color: var(--accent); }
-.filter-bar select { background: var(--bg2); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; font-size: 12px; }
+/* Command block */
+.cmd-block{margin:8px 0;background:#0a1218;border:1px solid #1a2a2f;border-radius:6px;overflow:hidden;animation:cmdSlide .3s}
+.cmd-block .cmd-header{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#0f1a22;border-bottom:1px solid #1a2a2f}
+.cmd-block .cmd-header .cmd-name{color:#ffab00;font-family:monospace;font-size:11px;font-weight:600}
+.cmd-block .cmd-header .cmd-status{font-size:10px;padding:2px 8px;border-radius:4px}
+.cmd-status.executing{color:#ffab00;background:#ffab0011}
+.cmd-status.complete{color:#00e676;background:#00e67611}
+.cmd-block .cmd-body{padding:8px 12px;font-family:monospace;font-size:11px;color:#7a9aaa;white-space:pre-wrap;max-height:200px;overflow-y:auto}
+.cmd-block .cmd-output{background:#060a10;padding:10px 12px;border-top:1px solid #1a2a2f;font-family:monospace;font-size:11px;color:#9ab0c0;white-space:pre-wrap;max-height:300px;overflow-y:auto;line-height:1.4}
+.cmd-block .cmd-output .error{color:#ff6b6b}
+.cmd-block .cmd-output .success{color:#00e676}
 
-/* Real-time feed */
-.live-feed { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 16px; max-height: 300px; overflow-y: auto; font-family: 'JetBrains Mono', monospace; font-size: 11px; }
-.live-feed .entry { padding: 4px 0; border-bottom: 1px solid var(--border2); display: flex; gap: 8px; }
-.live-feed .entry .time { color: var(--text3); }
-.live-feed .entry .msg.critical { color: var(--accent2); }
-.live-feed .entry .msg.high { color: var(--accent4); }
-.live-feed .entry .msg.success { color: var(--accent3); }
+/* Cycle header */
+.cycle-header{margin:12px 0 4px;padding:6px 10px;background:#0f17291a;border-radius:4px;display:flex;justify-content:space-between;align-items:center}
+.cycle-header .cycle-id{font-size:10px;color:#3a5a6a;font-family:monospace}
+.cycle-header .cycle-stats{font-size:10px;color:#4a6a7a}
 
-/* Modal */
-.modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; }
-.modal-backdrop.open { display: flex; align-items: center; justify-content: center; }
-.modal { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; width: 90%; max-width: 800px; max-height: 80vh; overflow-y: auto; padding: 24px; }
-.modal h2 { margin-bottom: 16px; }
+/* Analysis Card */
+.analysis-card{background:#0f1729;border:1px solid #162030;border-radius:8px;padding:14px;margin-bottom:10px;animation:slideIn .3s}
+.analysis-card .card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.analysis-card .card-header .title{font-size:12px;font-weight:600;color:#c8d0d8}
+.analysis-card .card-header .time{font-size:10px;color:#3a5a6a}
+.analysis-card .analysis-text{font-size:12px;line-height:1.6;color:#9aaaba;white-space:pre-wrap}
+.threat-badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:10px;font-weight:700}
+.threat-badge.low{background:#00e67611;color:#00e676;border:1px solid #00e67633}
+.threat-badge.medium{background:#ffab0011;color:#ffab00;border:1px solid #ffab0033}
+.threat-badge.high{background:#ff910011;color:#ff9100;border:1px solid #ff910033}
+.threat-badge.critical{background:#ff174411;color:#ff1744;border:1px solid #ff174433}
 
-/* Tabs */
-.tabs { display: flex; gap: 4px; margin-bottom: 16px; }
-.tab { padding: 8px 16px; border-radius: 6px 6px 0 0; cursor: pointer; font-size: 12px; font-weight: 500; color: var(--text2); background: var(--bg); border: 1px solid var(--border); border-bottom: none; }
-.tab.active { background: var(--panel); color: var(--text); border-color: var(--border2); }
-.tab-content { display: none; }
-.tab-content.active { display: block; }
+/* Alert Items */
+.alert-item{background:#0f1729;border-left:3px solid #448aff;border-radius:6px;padding:10px 14px;margin-bottom:8px;animation:slideIn .25s}
+.alert-item.critical{border-left-color:#ff1744}
+.alert-item.high{border-left-color:#ff9100}
+.alert-item.medium{border-left-color:#ffab00}
+.alert-item.low{border-left-color:#00e676}
+.alert-item .alert-time{font-size:10px;color:#3a5a6a;margin-bottom:2px}
+.alert-item .alert-title{font-size:12px;font-weight:600;color:#c8d0d8}
+.alert-item .alert-desc{font-size:11px;color:#7a8a9a;margin-top:2px}
+.alert-item .alert-footer{margin-top:6px;display:flex;gap:8px;align-items:center}
+.alert-item .alert-claude{font-size:10px;color:#4a7a6a;font-style:italic;max-width:400px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.severity-tag{display:inline-block;padding:2px 8px;border-radius:8px;font-size:9px;text-transform:uppercase;font-weight:700}
+.severity-tag.critical{background:#ff174411;color:#ff1744;border:1px solid #ff174433}
+.severity-tag.high{background:#ff910011;color:#ff9100;border:1px solid #ff910033}
+.severity-tag.medium{background:#ffab0011;color:#ffab00;border:1px solid #ffab0033}
+.severity-tag.low{background:#00e67611;color:#00e676;border:1px solid #00e67633}
+
+/* Packet Table */
+.packet-table{width:100%;border-collapse:collapse;font-size:11px;font-family:'SF Mono','Fira Code',monospace}
+.packet-table th{text-align:left;padding:8px 10px;border-bottom:2px solid #162030;color:#3a5a6a;font-size:9px;text-transform:uppercase;letter-spacing:.5px;position:sticky;top:0;background:#080c14}
+.packet-table td{padding:5px 10px;border-bottom:1px solid #141e2a;color:#7a9aaa;font-size:11px}
+.packet-table tr:hover{background:#0f1729}
+.packet-table .proto-http{color:#00e676}
+.packet-table .proto-dns{color:#448aff}
+.packet-table .proto-tcp{color:#ffab00}
+.packet-table .proto-udp{color:#00bcd4}
+.packet-table .proto-arp{color:#ff6b6b}
+.packet-table .src-badge{display:inline-block;padding:1px 6px;border-radius:8px;font-size:9px;font-weight:600;margin-left:4px;letter-spacing:.3px}
+.packet-table .src-badge.attack{background:#ff174411;color:#ff1744;border:1px solid #ff174433}
+.packet-table .src-badge.host{background:#2979ff11;color:#448aff;border:1px solid #2979ff33}
+.packet-table .src-badge.mixed{background:#ffab0011;color:#ffab00;border:1px solid #ffab0033}
+.packet-source-filter-btn{padding:4px 12px;border-radius:12px;font-size:10px;cursor:pointer;border:1px solid #1a2a3f;background:transparent;color:#5a6a7a;transition:all .15s}
+.packet-source-filter-btn:hover{background:#0f1729;color:#8a9aaa}
+.packet-source-filter-btn.active{background:#141e30;color:#5ab0ff;border-color:#2a4a6f}
+
+/* Chat */
+.chat-container{background:#0a0f1a;border:1px solid #141e2a;border-radius:8px;overflow:hidden}
+.chat-messages{height:400px;overflow-y:auto;padding:16px}
+.chat-message{margin-bottom:12px;animation:fadeIn .3s}
+.chat-message.user{text-align:right}
+.chat-message.user .bubble{background:#141e30;display:inline-block;padding:10px 14px;border-radius:14px 14px 4px 14px;max-width:70%;text-align:left;font-size:13px;color:#c8d0d8}
+.chat-message.agent .bubble{background:#0f1729;display:inline-block;padding:10px 14px;border-radius:14px 14px 14px 4px;max-width:85%;text-align:left;font-size:13px;border:1px solid #162030;color:#9aaaba;line-height:1.5;white-space:pre-wrap}
+.chat-input{display:flex;border-top:1px solid #141e2a;background:#0a0f1a}
+.chat-input input{flex:1;padding:12px 14px;background:#0a0f1a;border:none;color:#c8d0d8;font-size:13px;outline:none}
+.chat-input input::placeholder{color:#3a4a5a}
+.chat-input button{padding:12px 20px;background:#141e30;border:none;color:#5ab0ff;font-weight:600;cursor:pointer;transition:background .15s;font-size:12px}
+.chat-input button:hover{background:#1a2a3f}
+.chat-input button:disabled{opacity:.4;cursor:wait}
 
 /* Empty state */
-.empty { text-align: center; padding: 40px; color: var(--text2); }
-.empty .icon { font-size: 48px; margin-bottom: 12px; }
+.empty-state{text-align:center;padding:60px 20px;color:#2a3a4a}
+.empty-state .icon{font-size:40px;margin-bottom:12px;opacity:.5}
+.empty-state p{font-size:13px}
 
-/* Loader */
-.spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
+/* Session complete */
+.session-card{margin:16px;padding:20px;background:#0a1628;border:2px solid #1a4a2a;border-radius:12px}
+.session-card .session-header{font-size:16px;font-weight:700;color:#00e676;margin-bottom:12px}
+.session-card .session-stats{display:flex;gap:24px;margin-bottom:12px}
+.session-card .session-stat{display:flex;flex-direction:column;gap:2px}
+.session-card .session-stat .label{font-size:10px;color:#3a5a6a;text-transform:uppercase;letter-spacing:.5px}
+.session-card .session-stat .value{font-size:24px;font-weight:700;color:#c8d0d8}
+.session-card .session-stat .value.threat-low{color:#00e676}
+.session-card .session-stat .value.threat-medium{color:#ffab00}
+.session-card .session-stat .value.threat-high{color:#ff6d00}
+.session-card .session-stat .value.threat-critical{color:#ff1744}
+.session-card .session-message{font-size:12px;color:#5a7a6a;margin-bottom:12px}
+.session-card .session-actions{margin-top:8px}
+.session-card .session-hint{font-size:11px;color:#3a5a6a}
+.new-session-btn{padding:8px 20px;border-radius:8px;font-size:13px;font-weight:600;border:1px solid #00e676;background:#002a1a;color:#00e676;cursor:pointer;transition:all .15s;margin-bottom:8px}
+.new-session-btn:hover{background:#003a2a;border-color:#00ff88}
+.system-message{padding:8px 16px;margin:4px 0;font-size:12px;color:#3a7a5a;font-style:italic}
+
+/* ES Stats page */
+.stat-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #141e2a}
+.stat-row .stat-label{color:#5a6a7a;font-size:12px}
+.stat-row .stat-value{color:#c8d0d8;font-size:12px;font-weight:600}
+
+/* Filters */
+.filter-bar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+.filter-btn{padding:4px 12px;border-radius:12px;font-size:10px;cursor:pointer;border:1px solid #1a2a3f;background:transparent;color:#5a6a7a;transition:all .15s}
+.filter-btn:hover{background:#0f1729;color:#8a9aaa}
+.filter-btn.active{background:#141e30;color:#5ab0ff;border-color:#2a4a6f}
+
+/* Animations */
+@keyframes slideIn{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)}}
+@keyframes fadeSlide{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+@keyframes cmdSlide{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+/* Typewriter cursor */
+.typing-cursor::after{content:'▊';animation:blink 0.8s infinite;color:#00b4ff;margin-left:2px}
+@keyframes blink{0%,50%{opacity:1}51%,100%{opacity:0}}
+
+/* Thinking block with typewriter */
+.think-block.typing .think-text{color:#00b4ff}
+.think-block.typing .think-text::after{content:'▊';animation:blink 0.8s infinite;color:#00b4ff;margin-left:2px}
+
+/* Loading spinner */
+.spinner{display:inline-block;width:12px;height:12px;border:2px solid #1a2a3f;border-top-color:#00b4ff;border-radius:50%;animation:spin .6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+
+
+/* Tooltip */
+.mono{font-family:'SF Mono','Fira Code',monospace}
 
 /* Responsive */
-@media (max-width: 768px) {
-  .stats { grid-template-columns: repeat(2, 1fr); }
-  .container { padding: 12px; }
-  .nav { padding: 10px 12px; flex-wrap: wrap; }
+@media(max-width:768px){
+  .container{grid-template-columns:1fr}
+  .sidebar{display:none}
 }
+
+/* MITRE mapping */
+.mitre-tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;background:#1a1a2a;color:#5a7a9a;border:1px solid #1a2a3f;margin-right:4px;margin-top:4px}
+
+/* Thinking block connecting line */
+.think-connector{height:12px;border-left:1px dashed #1a2a3f;margin:0 0 0 11px}
+
+/* Setup overlay */
+.setup-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:#080c14;z-index:300;display:flex;justify-content:center;align-items:center}
+.setup-overlay.hidden{display:none}
+.setup-box{max-width:540px;width:90%;text-align:center}
+.setup-box h1{font-size:28px;font-weight:700;background:linear-gradient(90deg,#00b4ff,#0090ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px;letter-spacing:1px}
+.setup-box .subtitle{color:#4a6a7a;font-size:13px;margin-bottom:32px}
+.setup-box .input-group{display:flex;gap:8px;margin-bottom:12px}
+.setup-box input[type=url]{flex:1;padding:14px 16px;background:#0f1729;border:1px solid #1a2a3f;border-radius:8px;color:#c8d0d8;font-size:14px;outline:none;transition:border-color .2s}
+.setup-box input[type=url]:focus{border-color:#2a4a6f}
+.setup-box input[type=url]::placeholder{color:#3a4a5a}
+.setup-box button.primary{padding:14px 28px;background:#0055aa;color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s;white-space:nowrap}
+.setup-box button.primary:hover{background:#0070dd}
+.setup-box button.primary:disabled{opacity:.4;cursor:wait}
+.setup-box .hint{font-size:11px;color:#3a5a6a;margin-bottom:24px}
+.setup-box .hint code{color:#5a8aaa;background:#0f1729;padding:2px 6px;border-radius:3px;font-family:monospace;font-size:10px}
+.setup-box .status{font-size:12px;margin-top:12px;min-height:20px}
+.setup-box .status.ok{color:#00e676}
+.setup-box .status.err{color:#ff6b6b}
+.setup-box .status.pending{color:#ffab00}
+.setup-box .setup-header{margin-bottom:8px;font-size:12px;color:#2a3a4a;letter-spacing:.5px;text-transform:uppercase}
+.setup-box .example{color:#3a5a6a;font-size:11px;margin-top:8px}
 </style>
 </head>
 <body>
+<div class="setup-overlay" id="setupOverlay">
+<div class="setup-box">
+<div class="setup-header">PacketSentry v1.0</div>
+<h1>PacketSentry</h1>
+<p style="color:#4a6a7a;font-size:13px;margin-top:-4px;margin-bottom:20px">Autonomous Penetration Testing</p>
+<p class="subtitle">Configure your target application to begin automated penetration testing</p>
+<div class="input-group">
+<input type="url" id="targetUrlInput" placeholder="http://192.168.1.100:8080 or https://myapp.local" autofocus spellcheck="false">
+<button class="primary" id="setupBtn" onclick="submitTarget()">Start</button>
+</div>
+<p class="hint">Enter the URL of a custom web application you own or are authorized to test. Public/external sites are blocked.</p>
+<div class="status" id="setupStatus"></div>
+<div class="example">Examples: http://localhost:3000 &bull; http://192.168.1.50 &bull; https://myapp.internal:8443</div>
+</div>
+</div>
 
-<div class="nav">
-  <h1>Cage<span>Break</span> Dashboard</h1>
-  <a class="active" onclick="showTab('attacks')">Attacks <span class="badge" id="attackCount">0</span></a>
-  <a onclick="showTab('remediation')">Remediation</a>
-  <a onclick="showTab('reports')">Reports</a>
-  <a onclick="showTab('live')">Live Feed</a>
-  <div style="flex:1"></div>
-  <span style="font-size:11px;color:var(--text2)" id="statusText">connecting...</span>
-  <span class="spinner" id="statusSpinner"></span>
+<div class="header">
+<div class="header-left">
+<h1>PacketSentry</h1>
+<span class="session-badge" id="sessionBadge">SESSION: ---</span>
+</div>
+<div class="header-right">
+<div class="quick-links">
+<a href="/kibana/" target="_blank" class="quick-link kibana" title="Kibana web UI (Discover, Dashboards, Data Views)">&#9670; Kibana</a>
+<a href="/kibana/app/discover" target="_blank" class="quick-link kibana" title="Open Kibana Discover to query packetsentry-* indexes in real-time">&#9670; Discover</a>
+</div>
+<div class="status-pill">
+<span class="status-dot starting" id="statusDot"></span>
+<span id="agentStatusText">Initializing...</span>
+</div>
+</div>
 </div>
 
 <div class="container">
-
-<div id="tab-attacks" class="tab-content active">
-
-  <div class="stats">
-    <div class="stat total"><div class="num" id="statTotal">0</div><div class="label">Total Attacks</div></div>
-    <div class="stat critical"><div class="num" id="statCritical">0</div><div class="label">Critical</div></div>
-    <div class="stat high"><div class="num" id="statHigh">0</div><div class="label">High</div></div>
-    <div class="stat success"><div class="num" id="statSuccess">0</div><div class="label">Successful</div></div>
-  </div>
-
-  <div class="section">
-    <div class="section-header">
-      <h2>Attack History</h2>
-      <div class="btn-group">
-        <button class="btn btn-outline btn-sm" onclick="refreshAttacks()">&#x21bb; Refresh</button>
-      </div>
-    </div>
-    <div class="filter-bar">
-      <input id="searchInput" placeholder="Search attacks..." oninput="filterAttacks()">
-      <select id="severityFilter" onchange="filterAttacks()">
-        <option value="all">All Severities</option>
-        <option value="critical">Critical</option>
-        <option value="high">High</option>
-        <option value="medium">Medium</option>
-      </select>
-      <select id="statusFilter" onchange="filterAttacks()">
-        <option value="all">All Status</option>
-        <option value="success">Success</option>
-        <option value="failed">Failed</option>
-        <option value="error">Error</option>
-      </select>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr>
-          <th style="width:30px"></th>
-          <th>Time</th><th>Attack Name</th><th>Technique</th>
-          <th>Severity</th><th>Status</th><th>MITRE</th><th style="width:60px">Actions</th>
-        </tr></thead>
-        <tbody id="attackTable"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <div class="detail-panel" id="detailPanel">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <h3 id="detailTitle">Attack Detail</h3>
-      <button class="btn btn-sm btn-outline" onclick="closeDetail()">&#x2715; Close</button>
-    </div>
-    <div class="meta" id="detailMeta"></div>
-    <h4 style="margin:12px 0 8px">AI Analysis</h4>
-    <div class="analysis" id="detailAnalysis"></div>
-    <h4 style="margin:12px 0 8px">Raw Output</h4>
-    <pre id="detailOutput"></pre>
-    <div style="margin-top:12px">
-      <button class="btn btn-sm btn-danger" onclick="quickRemediate()">&#x26a1; Execute Remediation for This Attack</button>
-    </div>
-  </div>
+<div class="sidebar">
+<div class="sidebar-header">Live Status</div>
+<div class="stat-card" data-tip="Current operational state of the Claude agent — idle, running, analyzing, or error">
+<div class="label">Agent State</div>
+<div class="value blue" id="statState">WAITING</div>
+<div class="stat-sub" id="statDetail">connecting...</div>
+</div>
+<div class="stat-card" data-tip="Highest threat severity detected across all analysis cycles in this session">
+<div class="label">Threat Level</div>
+<div class="value green" id="statThreat">None</div>
+</div>
+<div class="stat-card" data-tip="Number of heuristic alerts raised by the AttackDetector this session (port scans, SYN floods, etc.)">
+<div class="label">Alerts (Session)</div>
+<div class="value red" id="statAlerts">0</div>
+</div>
+<div class="stat-card" data-tip="Completed agent analysis cycles — each cycle captures packets, detects threats, and invokes Claude">
+<div class="label">Analyses</div>
+<div class="value cyan" id="statCycles">0</div>
+</div>
+<div class="stat-card" data-tip="Claude reasoning blocks streamed to the dashboard — each block is a segment of the agent's chain-of-thought">
+<div class="label">Thinking Blocks</div>
+<div class="value blue" id="statThinking">0</div>
+</div>
+<div class="stat-card" data-tip="TShark commands autonomously executed by Claude during its analysis (run_tshark, capture_packets, get_statistics)">
+<div class="label">Commands Executed</div>
+<div class="value yellow" id="statCommands">0</div>
+</div>
+<div class="stat-card" data-tip="Alert documents indexed in Elasticsearch — each analysis cycle produces one document plus individual alert events">
+<div class="label">ES Alert Docs</div>
+<div class="value red" id="statEsAlerts"><span id="statEsAlertsVal">-</span></div>
+</div>
+<div class="stat-card" data-tip="Raw packet documents indexed in Elasticsearch — up to 5 packets per analysis cycle">
+<div class="label">ES Packet Docs</div>
+<div class="value blue" id="statEsPackets"><span id="statEsPacketsVal">-</span></div>
+</div>
+<div class="stat-card" data-tip="Activity log documents in Elasticsearch — every thinking block, command, and output is logged">
+<div class="label">ES Activity Docs</div>
+<div class="value cyan" id="statEsActivity"><span id="statEsActivityVal">-</span></div>
+</div>
+<div class="stat-card" data-tip="Packets originating from the Docker bridge network (172.30.0.0/24) — generated by the traffic-engine container">
+<div class="label">Attack Traffic</div>
+<div class="value red" id="statAttackPkts"><span id="statAttackPktsVal">0</span><span class="unit">pkts</span></div>
+</div>
+<div class="stat-card" data-tip="Packets from external sources outside the Docker bridge — your computer's regular network traffic">
+<div class="label">Host Traffic</div>
+<div class="value blue" id="statHostPkts"><span id="statHostPktsVal">0</span><span class="unit">pkts</span></div>
+</div>
 </div>
 
-<div id="tab-remediation" class="tab-content">
-  <div class="section">
-    <div class="section-header">
-      <h2>AI Remediation Agent</h2>
-      <div class="btn-group">
-        <select id="remediationTarget" style="background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:12px;margin-right:8px">
-          <option value="all">Full Security Remediation</option>
-          <option value="docker_socket_abuse">Docker Socket Abuse</option>
-          <option value="cap_sys_admin_escape">CAP_SYS_ADMIN Escape</option>
-          <option value="cgroup_escape">Cgroup Escape</option>
-          <option value="procfs_host_read">Procfs Host Read</option>
-          <option value="privileged_container">Privileged Container</option>
-          <option value="volume_mount_traversal">Volume Mount Traversal</option>
-          <option value="container_network_escape">Network Namespace Escape</option>
-          <option value="docker_api_abuse">Docker API Abuse</option>
-          <option value="sidecar_attack">Sidecar Attack</option>
-          <option value="seccomp_bypass">Seccomp/AppArmor Bypass</option>
-        </select>
-        <button class="btn btn-danger" id="remediateBtn" onclick="startRemediation()">&#x26a1; Execute Remediation</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="remediation-panel" id="remediationPanel">
-    <div id="remediationEmpty">
-      <div class="empty"><div class="icon">&#x2699;</div><p>Select a remediation target and click <strong>Execute Remediation</strong> to begin.<br>The AI agent will execute security hardening commands in real-time.</p></div>
-    </div>
-    <div id="remediationProgress" style="display:none">
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-        <span style="font-size:12px;color:var(--text2)">Remediation Progress</span>
-        <span style="font-size:12px;color:var(--text2)" id="progressText">0/0</span>
-      </div>
-      <div class="progress-bar"><div class="fill" id="progressFill" style="width:0%"></div></div>
-      <div id="remediationSteps"></div>
-    </div>
-    <div id="remediationComplete" style="display:none;margin-top:12px">
-      <div style="background:rgba(0,255,136,0.1);border:1px solid rgba(0,255,136,0.3);border-radius:6px;padding:16px;text-align:center">
-        <div style="font-size:24px;color:var(--accent3);margin-bottom:8px">&#x2714;</div>
-        <p style="font-size:14px;font-weight:600">Remediation Complete</p>
-        <p style="font-size:12px;color:var(--text2)" id="remediationSummary"></p>
-      </div>
-    </div>
-  </div>
-
-  <div class="section" style="margin-top:20px">
-    <div class="section-header">
-      <h2>Claude AI Remediation Analysis</h2>
-      <button class="btn btn-sm btn-outline" onclick="fetchClaudeAnalysis()">&#x21bb; Generate AI Analysis</button>
-    </div>
-    <div id="claudeAnalysisPanel" style="background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:16px;min-height:100px">
-      <div class="empty"><p>Click "Generate AI Analysis" to get a Claude-powered remediation strategy for the latest attacks.</p></div>
-    </div>
-  </div>
+<div class="main">
+<div class="tabs">
+<button class="tab active" onclick="showTab('console')">
+<span>🖥</span> Agent Console
+</button>
+<button class="tab" onclick="showTab('alerts')">
+<span>⚠</span> Alerts <span class="badge" id="alertBadge">0</span>
+</button>
+<button class="tab" onclick="showTab('packets')">
+<span>📦</span> Live Packets
+</button>
+<button class="tab" onclick="showTab('chat')">
+<span>💬</span> Ask Agent
+</button>
+<button class="tab" onclick="showTab('reports')">
+<span>📄</span> Reports
+</button>
 </div>
 
-<div id="tab-reports" class="tab-content">
-  <div class="section">
-    <div class="section-header">
-      <h2>Download Security Reports</h2>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px">
-      <div style="background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:20px">
-        <h3 style="font-size:15px;margin-bottom:8px">&#x1f4c4; Detailed HTML Report</h3>
-        <p style="font-size:12px;color:var(--text2);margin-bottom:16px">
-          Professional security assessment report with executive summary, attack timeline, detailed findings, remediation plan, affected infrastructure matrix, and MITRE ATT&CK mapping. Ready for hand-off to security teams.
-        </p>
-        <div style="display:flex;gap:8px">
-          <a href="/api/report/download" class="btn btn-primary btn-sm">&#x2b07; Download HTML</a>
-          <a href="/api/report/json" class="btn btn-outline btn-sm" target="_blank">&#x2b07; Download JSON</a>
-        </div>
-      </div>
-      <div style="background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:20px">
-        <h3 style="font-size:15px;margin-bottom:8px">&#x1f4ca; Attack Data Export</h3>
-        <p style="font-size:12px;color:var(--text2);margin-bottom:16px">
-          Raw attack data including all AI analysis, command outputs, and timestamps. Useful for SIEM integration, further analysis, or compliance documentation.
-        </p>
-        <div style="display:flex;gap:8px">
-          <a href="/api/report/json" class="btn btn-outline btn-sm">&#x2b07; Export Attack Logs</a>
-        </div>
-      </div>
-      <div style="background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:20px">
-        <h3 style="font-size:15px;margin-bottom:8px">&#x1f6e1; Falco Events Report</h3>
-        <p style="font-size:12px;color:var(--text2);margin-bottom:16px">
-          All Falco runtime security events detected during the assessment. Includes syscall-level details, container context, and rule matches.
-        </p>
-        <div style="display:flex;gap:8px">
-          <a href="/api/attacks" class="btn btn-outline btn-sm" target="_blank">&#x2b07; View Falco Events</a>
-        </div>
-      </div>
-    </div>
-  </div>
+<!-- PANEL: Agent Console -->
+<div id="panel-console" class="panel active">
+<div class="console-container">
+<div class="console-header">
+<div class="label">Agent Activity Stream <span style="color:#3a5a6a;font-weight:400;font-size:10px">— real-time thinking + command execution</span></div>
+<div class="controls">
+<button onclick="clearConsole()">Clear</button>
+<button onclick="scrollConsole()">Auto-Scroll: <span id="autoScrollLabel">ON</span></button>
+</div>
+</div>
+<div class="console-body" id="consoleBody">
+<div class="empty-state">
+<div class="icon">🖥</div>
+<p>Waiting for agent to begin analysis cycles...</p>
+<p style="font-size:11px;margin-top:6px;color:#1a2a3a">Thinking blocks and command executions will appear here in real-time</p>
+</div>
+</div>
+</div>
 </div>
 
-<div id="tab-live" class="tab-content">
-  <div class="section">
-    <div class="section-header">
-      <h2>Real-Time Attack Feed</h2>
-      <div>
-        <span style="font-size:11px;color:var(--accent3)" id="liveDot">&#x25cf; LIVE</span>
-        <button class="btn btn-sm btn-outline" onclick="clearLiveFeed()" style="margin-left:8px">Clear</button>
-      </div>
-    </div>
-    <div class="live-feed" id="liveFeed">
-      <div class="empty"><p>Waiting for attacks...</p></div>
-    </div>
-  </div>
+<!-- PANEL: Alerts -->
+<div id="panel-alerts" class="panel">
+<div class="filter-bar" id="alertFilters">
+<button class="filter-btn active" onclick="filterAlerts('all',this)">All</button>
+<button class="filter-btn" onclick="filterAlerts('critical',this)">Critical</button>
+<button class="filter-btn" onclick="filterAlerts('high',this)">High</button>
+<button class="filter-btn" onclick="filterAlerts('medium',this)">Medium</button>
+<button class="filter-btn" onclick="filterAlerts('low',this)">Low</button>
+</div>
+<div id="alertsContainer"></div>
+</div>
+
+<!-- PANEL: Packets -->
+<div id="panel-packets" class="panel">
+<div style="margin-bottom:8px;display:flex;gap:6px;align-items:center">
+<button class="packet-source-filter-btn active" data-src="all" onclick="setPacketSource('all',this)">All</button>
+<button class="packet-source-filter-btn" data-src="attack" onclick="setPacketSource('attack',this)">&#9654; Attack</button>
+<button class="packet-source-filter-btn" data-src="host" onclick="setPacketSource('host',this)">&#9678; Host</button>
+<span style="font-size:10px;color:#3a5a6a;margin-left:12px">
+<span style="color:#ff1744">&#9654; Attack</span> = Docker bridge (<tt>172.30.0.x</tt>) &nbsp;|&nbsp;
+<span style="color:#448aff">&#9678; Host</span> = external traffic
+</span>
+</div>
+<div style="overflow-x:auto">
+<table class="packet-table">
+<thead><tr><th>Time</th><th>Source</th><th>Dest</th><th>Proto</th><th>Info</th><th>Len</th><th>Src</th></tr></thead>
+<tbody id="packetTableBody"></tbody>
+</table>
+</div>
+</div>
+
+<!-- PANEL: Chat -->
+<div id="panel-chat" class="panel">
+<div class="chat-container">
+<div class="chat-messages" id="chatMessages">
+<div class="empty-state"><div class="icon">💬</div><p>The Ask Agent tab is locked during active analysis cycles. Wait for the current cycle to complete, then ask about network conditions, specific hosts, or protocols.</p></div>
+</div>
+<div class="chat-input">
+<input type="text" id="chatInput" placeholder="e.g., What protocols are active? Any scans detected?" onkeydown="if(event.key==='Enter')sendChat()">
+<button onclick="sendChat()">Ask</button>
+</div>
+</div>
+</div>
+
+<!-- PANEL: Reports -->
+<div id="panel-reports" class="panel">
+<div style="padding:20px">
+<div style="margin-bottom:16px">
+<h3 style="color:#c8d0d8;margin:0 0 6px 0;font-size:15px">Security Analysis Reports</h3>
+<p style="color:#5a6a7a;font-size:11px;margin:0">Generate comprehensive PDF reports with executive summary, attack timeline, findings, and recommendations — written by Claude AI.</p>
+</div>
+<div id="reportGenerateArea">
+<button id="reportGenBtn" onclick="generateReport()" style="padding:10px 24px;background:#0055aa;color:white;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;transition:background .15s" onmouseover="this.style.background='#0070dd'" onmouseout="this.style.background='#0055aa'">
+&#9654; Generate New Report
+</button>
+<span id="reportStatus" style="margin-left:12px;font-size:11px;color:#5a6a7a"></span>
+</div>
+<div id="reportProgress" style="display:none;margin:16px 0">
+<div style="height:6px;background:#141e2a;border-radius:3px;overflow:hidden;width:300px">
+<div id="reportProgressBar" style="height:100%;width:0%;background:#00b4ff;border-radius:3px;transition:width .5s"></div>
+</div>
+<span id="reportProgressText" style="font-size:10px;color:#5a6a7a;margin-left:8px">0%</span>
+</div>
+<div id="reportResult" style="display:none;margin:16px 0;padding:16px;background:#0a1729;border:1px solid #0055aa33;border-radius:8px">
+<div style="color:#00e676;font-size:13px;font-weight:600;margin-bottom:8px">&#10003; Report Ready</div>
+<p style="color:#7a9aaa;font-size:11px;margin:0 0 12px 0">Your security report has been generated. Click below to download.</p>
+<a id="reportDownloadLink" style="display:inline-block;padding:8px 20px;background:#00e676;color:#080c14;border-radius:5px;font-size:12px;font-weight:700;text-decoration:none" href="#">&#8681; Download PDF</a>
+</div>
+<div id="reportError" style="display:none;margin:16px 0;padding:12px;background:#1a0a0a;border:1px solid #ff174433;border-radius:6px;color:#ff6b6b;font-size:11px"></div>
+</div>
 </div>
 
 </div>
-
-<div class="modal-backdrop" id="modalBackdrop">
-  <div class="modal">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <h2 id="modalTitle">Attack Detail</h2>
-      <button class="btn btn-sm btn-outline" onclick="closeModal()">&#x2715;</button>
-    </div>
-    <div id="modalBody"></div>
-  </div>
 </div>
 
 <script>
-let allAttacks = [];
 let eventSource = null;
+let autoScroll = true;
+let currentAlertFilter = 'all';
+let lastCycleId = null;
+let thinkAccumulators = {};
+let _thinkRAF = null;
+let isAnalyzing = false;
 
-// ── Tab Switching ─────────────────────────────────────────
-function showTab(name) {
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
-  document.querySelector('.nav a[onclick*="' + name + '"]').classList.add('active');
-}
-
-// ── Fetch Attacks ─────────────────────────────────────────
-async function fetchAttacks() {
-  try {
-    document.getElementById('statusText').textContent = 'loading...';
-    const r = await fetch('/api/attacks');
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    allAttacks = await r.json();
-    renderAttacks(allAttacks);
-    updateStats(allAttacks);
-    document.getElementById('statusText').textContent = 'connected (' + allAttacks.length + ' attacks)';
-    document.getElementById('statusSpinner').style.display = 'none';
-  } catch(e) {
-    document.getElementById('statusText').textContent = 'disconnected';
-    document.getElementById('statusSpinner').style.display = 'inline-block';
-    setTimeout(fetchAttacks, 3000);
-  }
-}
-
-function renderAttacks(attacks) {
-  const tbody = document.getElementById('attackTable');
-  if (attacks.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8"><div class="empty"><div class="icon">&#x2699;</div><p><strong>No attacks recorded yet</strong></p><p style="font-size:11px;margin-top:4px">Phase 1 complete. Run Phase 2 to start the attacker:<br><code style="background:#1a1a2e;padding:4px 8px;border-radius:4px;font-size:11px">docker compose --profile attack up -d attacker</code></p><p style="font-size:10px;color:var(--text3);margin-top:4px">Auto-refreshing every 10 seconds...</p></div></td></tr>';
-    return;
-  }
-  let html = '';
-  attacks.forEach(a => {
-    const sev = a.severity || 'medium';
-    const ts = (a['@timestamp'] || a.timestamp || '').slice(0, 19) || 'N/A';
-    html += '<tr onclick="showDetail(\'' + a.attack_id + '\')" style="cursor:pointer">' +
-      '<td><span class="tag ' + sev + '" style="width:8px;height:8px;padding:0;border-radius:50%;display:inline-block"></span></td>' +
-      '<td style="font-size:11px;color:var(--text2)">' + ts + '</td>' +
-      '<td><strong>' + esc(a.attack_name) + '</strong></td>' +
-      '<td style="font-size:11px">' + esc(a.technique) + '</td>' +
-      '<td><span class="tag ' + sev + '">' + sev.toUpperCase() + '</span></td>' +
-      '<td><span class="tag ' + (a.status || 'unknown') + '">' + (a.status || 'unknown') + '</span></td>' +
-      '<td style="font-size:10px;color:var(--text2)">' + esc(a.mitre_technique || '').slice(0, 30) + '</td>' +
-      '<td><button class="btn btn-sm btn-outline" onclick="event.stopPropagation();showDetail(\'' + a.attack_id + '\')">&#x1f50d;</button></td>' +
-      '</tr>';
-  });
-  tbody.innerHTML = html;
-  document.getElementById('attackCount').textContent = attacks.length;
-}
-
-function updateStats(attacks) {
-  document.getElementById('statTotal').textContent = attacks.length;
-  document.getElementById('statCritical').textContent = attacks.filter(a => (a.severity || 'medium') === 'critical').length;
-  document.getElementById('statHigh').textContent = attacks.filter(a => (a.severity || 'medium') === 'high').length;
-  document.getElementById('statSuccess').textContent = attacks.filter(a => a.status === 'success').length;
-}
-
-function filterAttacks() {
-  const search = document.getElementById('searchInput').value.toLowerCase();
-  const severity = document.getElementById('severityFilter').value;
-  const status = document.getElementById('statusFilter').value;
-  let filtered = allAttacks.filter(a => {
-    if (severity !== 'all' && (a.severity || 'medium') !== severity) return false;
-    if (status !== 'all' && (a.status || '') !== status) return false;
-    if (search) {
-      const haystack = (a.attack_name + ' ' + a.technique + ' ' + a.detail + ' ' + (a.mitre_technique || '')).toLowerCase();
-      if (!haystack.includes(search)) return false;
+function updateChatTab() {
+    const tab = document.querySelector('.tab[onclick*="chat"]');
+    if (!tab) return;
+    if (isAnalyzing) {
+        tab.classList.add('disabled');
+        document.getElementById('statDetail').textContent = 'Ask Agent unavailable during analysis';
+    } else {
+        tab.classList.remove('disabled');
+        document.getElementById('statDetail').textContent = 'Ready for queries';
     }
-    return true;
-  });
-  renderAttacks(filtered);
-  updateStats(filtered);
 }
 
-function refreshAttacks() { fetchAttacks(); }
-
-// ── Detail View ───────────────────────────────────────────
-async function showDetail(attackId) {
-  try {
-    const r = await fetch('/api/attacks/' + attackId);
-    const a = await r.json();
-    if (a.error) { alert('Not found'); return; }
-
-    document.getElementById('detailPanel').classList.add('open');
-    document.getElementById('detailTitle').textContent = a.attack_name || 'Attack Detail';
-
-    const sev = a.severity || 'medium';
-    document.getElementById('detailMeta').innerHTML =
-      '<div class="meta-item"><div class="lbl">Time</div><div class="val">' + (a['@timestamp'] || '').slice(0,19) + '</div></div>' +
-      '<div class="meta-item"><div class="lbl">Technique</div><div class="val">' + esc(a.technique) + '</div></div>' +
-      '<div class="meta-item"><div class="lbl">Severity</div><div class="val"><span class="tag ' + sev + '">' + sev.toUpperCase() + '</span></div></div>' +
-      '<div class="meta-item"><div class="lbl">Status</div><div class="val"><span class="tag ' + (a.status||'') + '">' + (a.status||'') + '</span></div></div>' +
-      '<div class="meta-item"><div class="lbl">MITRE ATT&CK</div><div class="val" style="font-size:11px">' + esc(a.mitre_technique || 'N/A') + '</div></div>' +
-      '<div class="meta-item"><div class="lbl">Detail</div><div class="val" style="font-size:11px">' + esc(a.detail || '') + '</div></div>';
-
-    document.getElementById('detailAnalysis').innerHTML = '<pre style="background:transparent;padding:0;font-size:12px;white-space:pre-wrap">' + esc(a.analysis || 'No AI analysis available') + '</pre>';
-    document.getElementById('detailOutput').textContent = a.raw_output || 'No raw output';
-
-    document.getElementById('detailPanel').dataset.attackId = attackId;
-    document.getElementById('detailPanel').dataset.technique = a.technique || '';
-  } catch(e) {
-    alert('Failed to load detail: ' + e.message);
-  }
+function _flushThinkUpdates() {
+    _thinkRAF = null;
+    const body = document.getElementById('consoleBody');
+    for (const [cycleId, accum] of Object.entries(thinkAccumulators)) {
+        const textEl = document.getElementById(`think-text-${cycleId}`);
+        if (textEl) {
+            textEl.textContent = accum;
+        }
+    }
+    if (autoScroll) body.scrollTop = body.scrollHeight;
 }
 
-function closeDetail() {
-  document.getElementById('detailPanel').classList.remove('open');
+function _scheduleThinkFlush() {
+    if (!_thinkRAF) _thinkRAF = requestAnimationFrame(_flushThinkUpdates);
 }
 
-function quickRemediate() {
-  const technique = document.getElementById('detailPanel').dataset.technique;
-  if (technique) {
-    document.getElementById('remediationTarget').value = technique;
-    showTab('remediation');
-    startRemediation();
-  }
+// Tab switching
+function showTab(name) {
+    if (name === 'chat' && isAnalyzing) return;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelector(`.tab[onclick*='${name}']`).classList.add('active');
+    document.getElementById(`panel-${name}`).classList.add('active');
 }
 
-// ── Remediation Agent ─────────────────────────────────────
-let remediationActive = false;
+// SSE Connection
+function connectSSE() {
+    if (eventSource) eventSource.close();
+    eventSource = new EventSource('/api/events/stream');
+    eventSource.onmessage = function(e) {
+        try {
+            const event = JSON.parse(e.data);
+            handleSSEEvent(event);
+        } catch(err) {}
+    };
+    eventSource.onerror = function() {
+        setTimeout(connectSSE, 3000);
+    };
+}
 
-async function startRemediation() {
-  if (remediationActive) return;
-  remediationActive = true;
+function handleSSEEvent(event) {
+    const type = event.type;
+    const data = event.data || {};
+    const ts = event.timestamp || '';
+    const session = event.session || '';
 
-  const technique = document.getElementById('remediationTarget').value;
-  const btn = document.getElementById('remediateBtn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Remediating...';
+    if (session) document.getElementById('sessionBadge').textContent = `SESSION: ${session}`;
 
-  document.getElementById('remediationEmpty').style.display = 'none';
-  document.getElementById('remediationComplete').style.display = 'none';
-  document.getElementById('remediationProgress').style.display = 'block';
-  document.getElementById('remediationSteps').innerHTML = '';
+    switch(type) {
+        case 'heartbeat':
+            break;
 
-  try {
-    const r = await fetch('/api/remediation/execute', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ technique: technique })
+        case 'agent_status':
+            handleAgentStatus(data);
+            break;
+
+        case 'agent_cycle_start':
+            handleCycleStart(data, ts);
+            break;
+
+        case 'agent_think':
+            handleAgentThink(data, ts);
+            break;
+
+        case 'agent_command':
+            handleAgentCommand(data, ts);
+            break;
+
+        case 'agent_command_output':
+            handleCommandOutput(data);
+            break;
+
+        case 'agent_cycle_complete':
+            handleCycleComplete(data, ts);
+            break;
+
+        case 'alert':
+            handleAlert(data);
+            break;
+
+        case 'analysis_cycle':
+            if (data.sample_packets) updatePacketTable(data.sample_packets);
+            break;
+
+        case 'session_complete':
+            handleSessionComplete(data);
+            break;
+    }
+}
+
+// ============================
+// SESSION COMPLETE
+// ============================
+function handleSessionComplete(data) {
+    isAnalyzing = false;
+    updateChatTab();
+
+    const body = document.getElementById('consoleBody');
+    removeEmptyState(body);
+
+    const card = document.createElement('div');
+    card.className = 'session-card';
+    card.innerHTML = `
+        <div class="session-header">&#9654; Session Complete</div>
+        <div class="session-stats">
+            <div class="session-stat"><span class="label">Analysis Cycles</span><span class="value">${data.total_cycles || '?'}</span></div>
+            <div class="session-stat"><span class="label">Final Threat Level</span><span class="value threat-${data.final_threat || 'low'}">${(data.final_threat || 'low').toUpperCase()}</span></div>
+            <div class="session-stat"><span class="label">Stop Reason</span><span class="value" style="font-size:14px;color:#5a7a6a">${escapeHtml(data.stop_reason || 'Session ended')}</span></div>
+        </div>
+        <div class="session-message">${escapeHtml(data.message || '')}</div>
+        <div class="session-actions">
+            <button class="new-session-btn" onclick="startNewSession()">&#9654; Start New Session</button>
+            <span class="session-hint">Session completed autonomously. Click above to start a fresh session with a new target.</span>
+        </div>
+    `;
+    body.appendChild(card);
+    if (autoScroll) body.scrollTop = body.scrollHeight;
+}
+
+// ============================
+// AGENT STATUS
+// ============================
+function handleAgentStatus(data) {
+    const status = data.status || 'unknown';
+    const msg = data.message || '';
+    const dot = document.getElementById('statusDot');
+    dot.className = 'status-dot ' + status;
+
+    const statusText = document.getElementById('agentStatusText');
+    statusText.textContent = msg || status.charAt(0).toUpperCase() + status.slice(1);
+
+    const stateEl = document.getElementById('statState');
+    stateEl.textContent = status.toUpperCase();
+    stateEl.className = 'value ' + (status === 'running' || status === 'complete' ? 'green' : status === 'analyzing' ? 'yellow' : status === 'error' ? 'red' : 'blue');
+
+    document.getElementById('statDetail').textContent = msg.substring(0, 60);
+    isAnalyzing = (status === 'analyzing');
+    updateChatTab();
+}
+
+// ============================
+// CYCLE START
+// ============================
+function handleCycleStart(data, ts) {
+    const cycleId = data.cycle_id || '?';
+    lastCycleId = cycleId;
+    const packets = data.packet_count || 0;
+    const alerts = data.alert_count || 0;
+    updateStat('statCycles', n => n + 1);
+    isAnalyzing = true;
+    updateChatTab();
+
+    const body = document.getElementById('consoleBody');
+    removeEmptyState(body);
+
+    // Cycle header
+    const header = document.createElement('div');
+    header.className = 'cycle-header';
+    header.id = `cycle-${cycleId}`;
+    header.innerHTML = `
+        <span class="cycle-id">► ${cycleId}</span>
+        <span class="cycle-stats">📦 ${packets} pkts &nbsp; ⚠ ${alerts} alerts</span>
+    `;
+    body.appendChild(header);
+    if (autoScroll) body.scrollTop = body.scrollHeight;
+
+    // Clear old thinking accum for this cycle
+    thinkAccumulators[cycleId] = '';
+}
+
+// ============================
+// AGENT THINKING
+// ============================
+function handleAgentThink(data, ts) {
+    const cycleId = data.cycle_id || lastCycleId || 'stream';
+    const text = data.text || '';
+    const isFinal = data.final === true;
+    const blockText = data.block_text || '';
+    const isQuery = data.query === true;
+    const accumulated = data.accumulated || '';
+
+    const body = document.getElementById('consoleBody');
+    removeEmptyState(body);
+
+    if (!thinkAccumulators[cycleId]) {
+        thinkAccumulators[cycleId] = '';
+    }
+
+    if (text) {
+        thinkAccumulators[cycleId] += text;
+    }
+
+    if (isFinal && blockText) {
+        thinkAccumulators[cycleId] = blockText;
+    }
+
+    // Find or create think block for this cycle
+    let thinkBlock = document.getElementById(`think-${cycleId}`);
+    if (!thinkBlock) {
+        thinkBlock = document.createElement('div');
+        thinkBlock.className = 'think-block typing';
+        thinkBlock.id = `think-${cycleId}`;
+        thinkBlock.innerHTML = `<div class="think-text" id="think-text-${cycleId}"></div>`;
+        // Insert after cycle header
+        const header = document.getElementById(`cycle-${cycleId}`);
+        if (header && header.nextSibling) {
+            body.insertBefore(thinkBlock, header.nextSibling);
+        } else {
+            body.appendChild(thinkBlock);
+        }
+        if (autoScroll) body.scrollTop = body.scrollHeight;
+    }
+
+    _scheduleThinkFlush();
+
+    if (isFinal) {
+        thinkBlock.classList.remove('typing');
+        _flushThinkUpdates();
+        updateStat('statThinking', n => n + 1);
+    }
+}
+
+// ============================
+// AGENT COMMANDS
+// ============================
+function handleAgentCommand(data, ts) {
+    const cmd = data.command || '';
+    const args = data.args || {};
+    const cycleId = data.cycle_id || lastCycleId;
+    const toolId = data.tool_id || `cmd-${Date.now()}`;
+    const executing = data.executing === true;
+
+    const body = document.getElementById('consoleBody');
+    removeEmptyState(body);
+
+    let argsDisplay = '';
+    if (cmd === 'run_tshark' && args.args) {
+        argsDisplay = 'tshark ' + args.args.join(' ');
+    } else if (cmd === 'capture_packets') {
+        argsDisplay = `Capture ${args.count || '?'} packets${args.filter ? ' [filter: ' + args.filter + ']' : ''}`;
+    } else if (cmd === 'get_statistics') {
+        argsDisplay = `Statistics: ${args.stat_type || 'io'}`;
+    } else {
+        argsDisplay = JSON.stringify(args);
+    }
+
+    const cmdBlock = document.createElement('div');
+    cmdBlock.className = 'cmd-block';
+    cmdBlock.id = `cmd-${toolId}`;
+    cmdBlock.innerHTML = `
+        <div class="cmd-header">
+            <span class="cmd-name">$ ${cmd}${argsDisplay ? ' — ' + argsDisplay : ''}</span>
+            <span class="cmd-status executing"><span class="spinner"></span> executing...</span>
+        </div>
+        <div class="cmd-output" id="cmd-output-${toolId}"><span style="color:#3a5a6a">Waiting for output...</span></div>
+    `;
+
+    body.appendChild(cmdBlock);
+    if (autoScroll) body.scrollTop = body.scrollHeight;
+
+    updateStat('statCommands', n => n + 1);
+}
+
+function handleCommandOutput(data) {
+    const toolId = data.tool_id || '';
+    const output = data.output || '';
+    const cmdName = data.command || '';
+
+    // Find the command block
+    let cmdBlock;
+    if (toolId) {
+        cmdBlock = document.getElementById(`cmd-${toolId}`);
+    }
+    if (!cmdBlock && cmdName) {
+        // Find last block with this command name
+        const blocks = document.querySelectorAll('.cmd-block');
+        for (let i = blocks.length - 1; i >= 0; i--) {
+            const nameEl = blocks[i].querySelector('.cmd-name');
+            if (nameEl && nameEl.textContent.includes(cmdName)) {
+                cmdBlock = blocks[i];
+                break;
+            }
+        }
+    }
+
+    if (cmdBlock) {
+        const outputEl = cmdBlock.querySelector('.cmd-output');
+        if (outputEl) {
+            const escaped = escapeHtml(output.substring(0, 3000));
+            outputEl.innerHTML = escaped || '<span style="color:#3a5a6a">(no output)</span>';
+        }
+        const statusEl = cmdBlock.querySelector('.cmd-status');
+        if (statusEl) {
+            statusEl.className = 'cmd-status complete';
+            statusEl.textContent = '✓ complete';
+        }
+        if (autoScroll) {
+            const body = document.getElementById('consoleBody');
+            body.scrollTop = body.scrollHeight;
+        }
+    }
+}
+
+// ============================
+// CYCLE COMPLETE
+// ============================
+function handleCycleComplete(data, ts) {
+    const analysis = data.analysis || {};
+    const thinking = data.thinking || [];
+    const commands = data.commands || [];
+    const cycleId = data.cycle_id || lastCycleId;
+    isAnalyzing = false;
+    updateChatTab();
+
+    const body = document.getElementById('consoleBody');
+
+    // Add analysis card at the end of the cycle
+    const threat = analysis.threat_level || 'low';
+    const card = document.createElement('div');
+    card.className = 'analysis-card';
+    card.innerHTML = `
+        <div class="card-header">
+            <span class="title">📋 Analysis Complete — ${cycleId || ''}</span>
+            <span class="threat-badge ${threat}">${threat.toUpperCase()}</span>
+        </div>
+        <div class="analysis-text">${escapeHtml(analysis.analysis || 'No analysis provided.')}</div>
+        ${analysis.attack_name ? `<div style="margin-top:6px;font-size:11px;color:#ff9100">⚔ Attack: ${escapeHtml(analysis.attack_name)}</div>` : ''}
+        ${analysis.mitre_mapping ? `<div style="margin-top:4px"><span class="mitre-tag">${escapeHtml(analysis.mitre_mapping.tactic || '')}</span><span class="mitre-tag">${escapeHtml(analysis.mitre_mapping.technique || '')}</span></div>` : ''}
+        ${analysis.recommendations && analysis.recommendations.length ? `
+            <div style="margin-top:8px;padding-top:8px;border-top:1px solid #141e2a">
+                <span style="font-size:10px;color:#3a5a6a;text-transform:uppercase;letter-spacing:.5px">Recommendations</span>
+                <ul style="margin-top:4px;padding-left:16px">
+                    ${analysis.recommendations.map(r => `<li style="font-size:11px;color:#5a7a6a;margin-bottom:2px">${escapeHtml(r)}</li>`).join('')}
+                </ul>
+            </div>
+        ` : ''}
+        ${analysis.confidence !== undefined ? `<div style="margin-top:6px;font-size:10px;color:#3a5a6a">Confidence: ${(analysis.confidence * 100).toFixed(0)}%</div>` : ''}
+    `;
+    body.appendChild(card);
+    if (autoScroll) body.scrollTop = body.scrollHeight;
+
+    // Update sidebar
+    updateStat('statThreat', threat.charAt(0).toUpperCase() + threat.slice(1));
+    document.getElementById('statThreat').className = 'value ' + (threat === 'critical' ? 'red' : threat === 'high' ? 'yellow' : threat === 'medium' ? 'yellow' : 'green');
+}
+
+// ============================
+// ALERTS
+// ============================
+function handleAlert(data) {
+    const sev = data.severity || 'low';
+    const container = document.getElementById('alertsContainer');
+
+    const el = document.createElement('div');
+    el.className = `alert-item ${sev}`;
+    el.dataset.severity = sev;
+    el.innerHTML = `
+        <div class="alert-time">${data.timestamp || 'now'}</div>
+        <div class="alert-title">${escapeHtml(data.event_type || 'Alert')}</div>
+        <div class="alert-desc">${escapeHtml(data.description || '')}</div>
+        <div class="alert-footer">
+            <span class="severity-tag ${sev}">${sev}</span>
+            ${data.claude_verdict ? `<span class="alert-claude">🤖 ${escapeHtml(data.claude_verdict.substring(0, 120))}</span>` : ''}
+        </div>
+    `;
+    container.prepend(el);
+    while (container.children.length > 100) container.removeChild(container.lastChild);
+
+    // Update badges
+    const count = document.querySelectorAll('.alert-item').length;
+    updateStat('statAlerts', count);
+    document.getElementById('alertBadge').textContent = count;
+
+    // Apply current filter
+    if (currentAlertFilter !== 'all') {
+        el.style.display = sev === currentAlertFilter ? '' : 'none';
+    }
+}
+
+// ============================
+// PACKET TABLE
+// ============================
+const DOCKER_NETWORK_CIDR = '172.30.0.0/24';
+
+function ipToInt(ip) {
+    const parts = ip.split('.');
+    return ((parseInt(parts[0]) << 24) + (parseInt(parts[1]) << 16) + (parseInt(parts[2]) << 8) + parseInt(parts[3])) >>> 0;
+}
+
+function ipInCIDR(ip, cidr) {
+    const [net, bits] = cidr.split('/');
+    const mask = ~(2 ** (32 - parseInt(bits)) - 1);
+    return (ipToInt(ip) & mask) === (ipToInt(net) & mask);
+}
+
+function classifyPacket(pkt) {
+    let inDocker = false;
+    if (pkt.ip_src) inDocker = inDocker || ipInCIDR(pkt.ip_src, DOCKER_NETWORK_CIDR);
+    if (pkt.ip_dst) inDocker = inDocker || ipInCIDR(pkt.ip_dst, DOCKER_NETWORK_CIDR);
+    return inDocker ? 'attack' : 'host';
+}
+
+function classifyLabel(label) {
+    return label === 'attack' ? 'Attack' : 'Host';
+}
+
+let packetSourceFilter = 'all';
+let attackPktCount = 0;
+let hostPktCount = 0;
+
+function updatePacketTable(packets) {
+    const tbody = document.getElementById('packetTableBody');
+    packets.forEach(p => {
+        const cls = classifyPacket(p);
+        let tr = document.createElement('tr');
+        if (packetSourceFilter !== 'all' && cls !== packetSourceFilter) {
+            tr.style.display = 'none';
+        }
+        const ts = p.timestamp ? new Date(parseFloat(p.timestamp)*1000).toLocaleTimeString() : '';
+        const proto = (p.protocol || '').toLowerCase();
+        tr.innerHTML = `
+            <td>${ts}</td>
+            <td>${escapeHtml(p.ip_src || '')}${p.src_port ? ':'+p.src_port : ''}</td>
+            <td>${escapeHtml(p.ip_dst || '')}${p.dst_port ? ':'+p.dst_port : ''}</td>
+            <td class="proto-${proto}">${escapeHtml(p.protocol || '')}</td>
+            <td style="max-width:350px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml((p.info || '').substring(0, 80))}</td>
+            <td>${p.frame_len || ''}</td>
+            <td><span class="src-badge ${cls}">${classifyLabel(cls)}</span></td>
+        `;
+        tbody.prepend(tr);
+        while (tbody.children.length > 200) tbody.removeChild(tbody.lastChild);
+        if (cls === 'attack') attackPktCount++;
+        else hostPktCount++;
     });
-    const data = await r.json();
-    if (data.error) { alert('Error: ' + data.error); return; }
+    document.getElementById('statAttackPktsVal').textContent = attackPktCount;
+    document.getElementById('statHostPktsVal').textContent = hostPktCount;
+}
 
-    const sessionId = data.session_id;
-    const totalSteps = data.total_steps;
-    document.getElementById('progressText').textContent = '0/' + totalSteps;
+function setPacketSource(val, btn) {
+    packetSourceFilter = val;
+    document.querySelectorAll('.packet-source-filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const tbody = document.getElementById('packetTableBody');
+    Array.from(tbody.children).forEach(tr => {
+        const badge = tr.querySelector('.src-badge');
+        if (!badge) return;
+        if (val === 'all') { tr.style.display = ''; return; }
+        tr.style.display = badge.classList.contains(val) ? '' : 'none';
+    });
+}
 
-    const es = new EventSource('/api/remediation/stream/' + sessionId);
-    let completedSteps = 0;
-    let successCount = 0;
-    let failCount = 0;
+// ============================
+// CHAT
+// ============================
+async function sendChat() {
+    const input = document.getElementById('chatInput');
+    const question = input.value.trim();
+    if (!question) return;
 
-    es.onmessage = function(event) {
-      const data = JSON.parse(event.data);
-      if (data.status === 'completed') {
-        es.close();
-        remediationActive = false;
-        btn.disabled = false;
-        btn.innerHTML = '&#x26a1; Execute Remediation';
-        document.getElementById('remediationSummary').textContent = 'Completed: ' + successCount + ' succeeded, ' + failCount + ' failed';
-        document.getElementById('remediationComplete').style.display = 'block';
-        return;
-      }
+    const messages = document.getElementById('chatMessages');
+    messages.innerHTML = '';
+    const userMsg = document.createElement('div');
+    userMsg.className = 'chat-message user';
+    userMsg.innerHTML = `<div class="bubble">${escapeHtml(question)}</div>`;
+    messages.appendChild(userMsg);
+    input.value = '';
+    document.querySelector('.chat-input button').disabled = true;
 
-      const stepsDiv = document.getElementById('remediationSteps');
-      let card = document.querySelector('.step-card[data-step="' + data.step + '"]');
+    const agentMsg = document.createElement('div');
+    agentMsg.className = 'chat-message agent';
+    agentMsg.innerHTML = `<div class="bubble"><span class="spinner"></span> Analyzing...</div>`;
+    messages.appendChild(agentMsg);
+    messages.scrollTop = messages.scrollHeight;
 
-      if (!card) {
-        card = document.createElement('div');
-        card.className = 'step-card';
-        card.dataset.step = data.step;
-        card.innerHTML =
-          '<div class="step-header"><span class="step-num">Step ' + data.step + '/' + data.total + '</span><span class="tag running">RUNNING</span></div>' +
-          '<div class="step-desc">' + esc(data.description) + '</div>' +
-          '<div class="thinking"><strong>Agent Thinking:</strong> ' + esc(data.thinking) + '</div>' +
-          '<div><strong>Command:</strong> <pre>' + esc(data.command) + '</pre></div>' +
-          '<div class="output" id="output-' + data.step + '"></div>';
-        stepsDiv.appendChild(card);
-      }
+    try {
+        const resp = await fetch('/api/ask', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({question})
+        });
+        const data = await resp.json();
+        agentMsg.innerHTML = `<div class="bubble">${escapeHtml(data.answer || 'No response')}</div>`;
+    } catch(err) {
+        agentMsg.innerHTML = `<div class="bubble" style="color:#ff6b6b">Error: ${escapeHtml(err.message)}</div>`;
+    }
+    document.querySelector('.chat-input button').disabled = false;
+    messages.scrollTop = messages.scrollHeight;
+}
 
-      if (data.output) {
-        const outputDiv = document.getElementById('output-' + data.step);
-        if (outputDiv) {
-          const isError = data.status === 'failed' || data.error;
-          outputDiv.innerHTML = '<pre class="' + (isError ? 'error' : '') + '">' + esc(data.output) + '</pre>';
-        }
-        const tag = card.querySelector('.tag');
-        if (data.status === 'success') {
-          tag.className = 'tag success';
-          tag.textContent = 'SUCCESS';
-          successCount++;
-        } else if (data.status === 'failed') {
-          tag.className = 'tag failed';
-          tag.textContent = 'FAILED';
-          failCount++;
-        }
-        completedSteps++;
-        document.getElementById('progressText').textContent = completedSteps + '/' + totalSteps;
-        document.getElementById('progressFill').style.width = (completedSteps / totalSteps * 100) + '%';
-      }
-    };
+// ============================
+// HELPERS
+// ============================
+function removeEmptyState(body) {
+    const empty = body.querySelector('.empty-state');
+    if (empty) empty.remove();
+}
 
-    es.onerror = function() {
-      es.close();
-      remediationActive = false;
-      btn.disabled = false;
-      btn.innerHTML = '&#x26a1; Execute Remediation';
-    };
-  } catch(e) {
-    alert('Failed to start remediation: ' + e.message);
-    remediationActive = false;
+function updateStat(id, updater) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (typeof updater === 'function') {
+        const curr = isNaN(parseInt(el.textContent)) ? 0 : parseInt(el.textContent);
+        el.textContent = updater(curr);
+    } else {
+        el.textContent = updater;
+    }
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// ============================
+// REPORT GENERATION
+// ============================
+function generateReport() {
+    const btn = document.getElementById('reportGenBtn');
+    const status = document.getElementById('reportStatus');
+    const progress = document.getElementById('reportProgress');
+    const bar = document.getElementById('reportProgressBar');
+    const ptext = document.getElementById('reportProgressText');
+    const result = document.getElementById('reportResult');
+    const error = document.getElementById('reportError');
+
+    btn.disabled = true;
+    btn.textContent = '\u25B6 Generating...';
+    status.textContent = '';
+    result.style.display = 'none';
+    error.style.display = 'none';
+    progress.style.display = 'flex';
+
+    fetch('/api/report/generate', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.report_id) {
+                pollReportStatus(data.report_id);
+            } else {
+                showReportError('Failed to start generation');
+            }
+        })
+        .catch(err => showReportError('Connection error: ' + err.message));
+}
+
+function pollReportStatus(reportId) {
+    const bar = document.getElementById('reportProgressBar');
+    const ptext = document.getElementById('reportProgressText');
+    const status = document.getElementById('reportStatus');
+
+    const poll = setInterval(() => {
+        fetch('/api/report/status/' + reportId)
+            .then(r => r.json())
+            .then(data => {
+                bar.style.width = data.progress + '%';
+                ptext.textContent = data.progress + '%';
+                if (data.status === 'complete') {
+                    clearInterval(poll);
+                    showReportReady(reportId);
+                } else if (data.status === 'error') {
+                    clearInterval(poll);
+                    showReportError(data.error || 'Unknown error');
+                }
+            })
+            .catch(() => {});
+    }, 1500);
+}
+
+function showReportReady(reportId) {
+    const btn = document.getElementById('reportGenBtn');
+    const progress = document.getElementById('reportProgress');
+    const result = document.getElementById('reportResult');
+    const link = document.getElementById('reportDownloadLink');
+    const status = document.getElementById('reportStatus');
+
     btn.disabled = false;
-    btn.innerHTML = '&#x26a1; Execute Remediation';
-  }
+    btn.textContent = '\u25B6 Generate New Report';
+    progress.style.display = 'none';
+    status.textContent = '';
+
+    link.href = '/api/report/download/' + reportId;
+    result.style.display = 'block';
 }
 
-// ── Claude AI Analysis ────────────────────────────────────
-async function fetchClaudeAnalysis() {
-  const panel = document.getElementById('claudeAnalysisPanel');
-  panel.innerHTML = '<div style="text-align:center;padding:20px"><span class="spinner"></span><p style="margin-top:8px;color:var(--text2)">Claude is analyzing attacks...</p></div>';
+function showReportError(msg) {
+    const btn = document.getElementById('reportGenBtn');
+    const progress = document.getElementById('reportProgress');
+    const error = document.getElementById('reportError');
 
-  try {
-    const r = await fetch('/api/remediation/claude', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ attack_data: allAttacks.slice(0, 5), context: 'Full container security assessment' })
+    btn.disabled = false;
+    btn.textContent = '\u25B6 Generate New Report';
+    progress.style.display = 'none';
+    error.textContent = 'Error: ' + msg;
+    error.style.display = 'block';
+}
+
+function clearConsole() {
+    const body = document.getElementById('consoleBody');
+    body.innerHTML = '<div class="empty-state"><div class="icon">🖥</div><p>Console cleared. Waiting for next analysis cycle...</p></div>';
+}
+
+function scrollConsole() {
+    autoScroll = !autoScroll;
+    document.getElementById('autoScrollLabel').textContent = autoScroll ? 'ON' : 'OFF';
+}
+
+function filterAlerts(severity, btn) {
+    currentAlertFilter = severity;
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+
+    document.querySelectorAll('.alert-item').forEach(el => {
+        const sev = el.dataset.severity;
+        el.style.display = (severity === 'all' || sev === severity) ? '' : 'none';
     });
-    const data = await r.json();
-    const analysis = data.analysis || 'No analysis available';
-    panel.innerHTML = '<pre style="white-space:pre-wrap;font-size:12px;font-family:JetBrains Mono,monospace;background:var(--bg);padding:16px;border-radius:6px">' + esc(analysis) + '</pre>';
-  } catch(e) {
-    panel.innerHTML = '<div class="empty"><p>Failed to get Claude analysis: ' + e.message + '</p></div>';
-  }
 }
 
-// ── Live Feed ─────────────────────────────────────────────
-let lastAttackCount = 0;
-
-function pollLiveFeed() {
-  if (allAttacks.length > lastAttackCount) {
-    const newAttacks = allAttacks.slice(0, allAttacks.length - lastAttackCount);
-    lastAttackCount = allAttacks.length;
-    newAttacks.reverse().forEach(a => addLiveEntry(a));
-  }
+async function refreshPackets() {
+    try {
+        const resp = await fetch('/api/packets/recent?limit=60');
+        if (!resp.ok) return;
+        const packets = await resp.json();
+        if (packets.length > 0) updatePacketTable(packets);
+    } catch(err) {}
 }
 
-function addLiveEntry(attack) {
-  const feed = document.getElementById('liveFeed');
-  const empty = feed.querySelector('.empty');
-  if (empty) empty.remove();
-
-  const sev = attack.severity || 'medium';
-  const entry = document.createElement('div');
-  entry.className = 'entry';
-  entry.innerHTML = '<span class="time">' + new Date().toLocaleTimeString() + '</span>' +
-    '<span class="msg ' + sev + '">[' + sev.toUpperCase() + '] ' + esc(attack.attack_name) + ' — ' + esc(attack.detail || '').slice(0, 100) + '</span>';
-  feed.insertBefore(entry, feed.firstChild);
-
-  while (feed.children.length > 100) feed.removeChild(feed.lastChild);
+async function refreshESStats() {
+    try {
+        const resp = await fetch('/api/stats');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        document.getElementById('statEsAlertsVal').textContent = data.total_alerts ?? '-';
+        document.getElementById('statEsPacketsVal').textContent = data.total_packets ?? '-';
+        document.getElementById('statEsActivityVal').textContent = data.total_activities ?? '-';
+        document.getElementById('statThinking').textContent = data.thinking_blocks || 0;
+        document.getElementById('statCommands').textContent = data.commands_executed || 0;
+    } catch(err) {}
 }
 
-function clearLiveFeed() {
-  document.getElementById('liveFeed').innerHTML = '<div class="empty"><p>Feed cleared. Waiting for new events...</p></div>';
+// ============================
+// SETUP FLOW
+// ============================
+function submitTarget() {
+    const input = document.getElementById('targetUrlInput');
+    const btn = document.getElementById('setupBtn');
+    const status = document.getElementById('setupStatus');
+    const url = input.value.trim();
+
+    if (!url) {
+        status.className = 'status err';
+        status.textContent = 'Please enter a URL';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Validating...';
+    status.className = 'status pending';
+    status.textContent = 'Checking target...';
+
+    fetch('/api/setup/target', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({url})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.ok) {
+            status.className = 'status ok';
+            status.innerHTML = `Target set: ${data.target}<br><span style="color:#4a8a6a;font-size:11px">${data.reason || ''}</span>`;
+            setTimeout(() => {
+                document.getElementById('setupOverlay').classList.add('hidden');
+                startMainUI();
+            }, 1500);
+        } else {
+            btn.disabled = false;
+            btn.textContent = 'Start';
+            status.className = 'status err';
+            status.textContent = data.error || 'Validation failed';
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.textContent = 'Start';
+        status.className = 'status err';
+        status.textContent = 'Connection error: ' + err.message;
+    });
 }
 
-// ── Utilities ─────────────────────────────────────────────
-function esc(s) {
-  if (!s) return '';
-  const d = document.createElement('div');
-  d.textContent = s;
-  return d.innerHTML;
+function startNewSession() {
+    fetch('/api/reset', {method: 'POST'})
+    .then(() => {
+        clearAllState();
+        document.getElementById('setupOverlay').classList.remove('hidden');
+        document.getElementById('targetUrlInput').value = '';
+        document.getElementById('setupBtn').disabled = false;
+        document.getElementById('setupBtn').textContent = 'Start';
+        document.getElementById('setupStatus').className = 'status';
+        document.getElementById('setupStatus').textContent = '';
+    });
 }
 
-function closeModal() { document.getElementById('modalBackdrop').classList.remove('open'); }
+function addSystemMessage(msg) {
+    const body = document.getElementById('consoleBody');
+    removeEmptyState(body);
+    const div = document.createElement('div');
+    div.className = 'system-message';
+    div.textContent = '\u2139 ' + msg;
+    body.appendChild(div);
+    if (autoScroll) body.scrollTop = body.scrollHeight;
+}
 
-// ── Polling Loop ──────────────────────────────────────────
-setInterval(() => {
-  pollLiveFeed();
-}, 2000);
+function clearAllState() {
+    document.getElementById('consoleBody').innerHTML = '<div class="empty-state"><div class="icon">🖥</div><p>Dashboard reset. Waiting for new analysis cycles...</p></div>';
+    document.getElementById('alertsContainer').innerHTML = '';
+    document.getElementById('packetTableBody').innerHTML = '';
+    document.getElementById('chatMessages').innerHTML = '<div class="empty-state"><div class="icon">💬</div><p>Ask about current network conditions after analysis begins.</p></div>';
+    document.getElementById('statState').textContent = 'WAITING';
+    document.getElementById('statState').className = 'value blue';
+    document.getElementById('statThreat').textContent = 'None';
+    document.getElementById('statThreat').className = 'value green';
+    document.getElementById('statAlerts').textContent = '0';
+    document.getElementById('alertBadge').textContent = '0';
+    document.getElementById('statCycles').textContent = '0';
+    document.getElementById('statThinking').textContent = '0';
+    document.getElementById('statCommands').textContent = '0';
+    document.getElementById('statAttackPktsVal').textContent = '0';
+    document.getElementById('statHostPktsVal').textContent = '0';
+    attackPktCount = 0;
+    hostPktCount = 0;
+    lastCycleId = null;
+    thinkAccumulators = {};
+}
 
-// ── Init ──────────────────────────────────────────────────
-fetchAttacks();
-setInterval(fetchAttacks, 10000);
+function startMainUI() {
+    clearAllState();
+    if (eventSource) eventSource.close();
+    fetch('/api/reset', {method: 'POST'}).catch(() => {});
+    setTimeout(connectSSE, 2000);
+    if (window._refreshInterval) clearInterval(window._refreshInterval);
+    setInterval(refreshESStats, 5000);
+    setInterval(refreshPackets, 8000);
+    setTimeout(refreshESStats, 500);
+}
 
-// Add live dot animation
-setInterval(() => {
-  const dot = document.getElementById('liveDot');
-  dot.style.opacity = dot.style.opacity === '1' ? '0.3' : '1';
-}, 1000);
+// ============================
+// INIT — check target status
+// ============================
+(async function() {
+    try {
+        const resp = await fetch('/api/target');
+        const data = await resp.json();
+        if (data.url) {
+            document.getElementById('setupOverlay').classList.add('hidden');
+            startMainUI();
+        } else {
+            document.getElementById('setupOverlay').classList.remove('hidden');
+        }
+    } catch {
+        document.getElementById('setupOverlay').classList.remove('hidden');
+    }
+})();
 </script>
 </body>
 </html>

@@ -7,41 +7,52 @@ PacketSentry is a fully containerized network penetration testing platform where
 ## Architecture
 
 ```
-                         ┌─────────────┐
-                         │   You enter  │
-                         │  custom URL  │
-                         │  on dashboard │
-                         └──────┬──────┘
-                                │
-                                ▼
-┌────────────────────────────────────────────────────────────┐
-│                   PacketSentry Platform                     │
-│                                                            │
-│  ┌────────────────┐          ┌──────────────────────┐      │
-│  │   Traffic      │◄────────►│   Your Custom Web App│      │
-│  │   Engine       │  attacks │   (user-provided URL)│      │
-│  │  (normal +     │─────────►│                      │      │
-│  │   6 attacks)   │  traffic │                      │      │
-│  └───────┬────────┘          └──────────┬───────────┘      │
-│          │                              │                   │
-│          │                              │ captures (tshark) │
-│          │                              ▼                   │
-│          │                     ┌────────────────┐           │
-│          └────────────────────►│  Claude Agent   │           │
-│           attack IPs logged    │  (host net +   │           │
-│                                │   tshark API)  │           │
-│                                └───────┬────────┘           │
-│                                        │                    │
-│                     ┌──────────────────┴───────────┐        │
-│                     │                              │        │
-│                     ▼                              ▼        │
-│  ┌────────────────────────────┐  ┌──────────────────────┐   │
-│  │    Elasticsearch + Kibana  │  │  Web Dashboard :5000 │   │
-│  │  alerts-* / packets-* /    │  │  Setup → Console →   │   │
-│  │  activity-* indexes        │  │  Alerts → Packets →  │   │
-│  └────────────────────────────┘  │  Chat → Reports      │   │
-│                                  └──────────────────────┘   │
-└────────────────────────────────────────────────────────────┘
+                          ┌─────────────────────┐
+                          │  1. You enter custom │
+                          │   URL on dashboard   │
+                          └──────────┬──────────┘
+                                     │
+                                     ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                         PacketSentry Platform                           │
+│                                                                         │
+│  ┌──────────────┐          ┌───────────────────────┐                    │
+│  │  Traffic     │◄────────►│  Your Custom Web App  │   LAYER 1          │
+│  │  Engine      │ ①attacks │  (user-provided URL)  │   ATTACK GEN       │
+│  │  (nmap,      │─────────►│                        │                    │
+│  │   hping3)    │ ⑨polls  │                        │                    │
+│  └──────┬───────┘  target  └───────────┬───────────┘                    │
+│         │                              │                                │
+│         │                              │ ② tshark capture              │
+│         │                              ▼                                │
+│         │                     ┌──────────────────┐                      │
+│         └────────────────────►│  Claude Agent     │   LAYER 2           │
+│          attack IPs logged    │  (host network +  │   AI ANALYSIS       │
+│                               │   tshark + query  │                      │
+│                               │   API :8000)      │                      │
+│                               └───┬────┬────┬────┘                      │
+│                                   │    │    │                           │
+│                   ③push to ES     │    │    │ ④SSE events               │
+│                                   ▼    │    ▼                           │
+│  ┌──────────────────────┐         │    ┌─────────────────────┐          │
+│  │  Elasticsearch       │◄───────┘    │  Web Dashboard :5000│ LAYER 3  │
+│  │  alerts-* / packets-*│              │  Console / Alerts / │ STORAGE  │
+│  │  activity-* indexes  │──➔Kibana    │  Packets / Chat /   │ & UI     │
+│  └──────────────────────┘  ⑧proxy     │  Reports            │          │
+│                                at      └──┬──────┬──────┬───┘          │
+│                                 /kibana/   │      │      │              │
+│                                          ⑤│      │⑦     │              │
+│                                           │      │      │              │
+│                                     ┌─────▼──┐ ┌──▼──────▼──┐          │
+│                                     │ Ask    │ │ Report     │          │
+│                                     │ Agent  │ │ Generator  │          │
+│                                     │ (chat) │ │→Claude→PDF │          │
+│                                     └────────┘ └────────────┘          │
+│                                                                         │
+│  ⑥ You access dashboard at http://localhost:5000                        │
+│                                                                         │
+│  "Start New Session" → Agent resets, waits for next target URL          │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Attack Scenarios
@@ -67,6 +78,20 @@ The traffic engine autonomously generates these REAL attacks against your custom
 6. All data (alerts, packets, activity) is logged to Elasticsearch for later querying
 7. The agent **stops autonomously** — Claude itself decides when analysis is complete based on what it found about the target. Simple sites finish in fewer cycles; complex apps get deeper investigation. Safety limits prevent infinite loops.
 8. After completion, the agent **waits for a new target** — click "Start New Session" on the session card to run again without restarting containers
+
+### Data Flow (numbered arrows in the architecture diagram)
+
+| # | From | To | What |
+|---|------|----|------|
+| ① | Traffic Engine | Your Custom Web App | Real attacks: SYN flood, port scan, Slowloris, DNS amp, dir bust, TCP scan |
+| ② | Your Custom Web App | Claude Agent | Traffic captured via `tshark -i any` (host networking) |
+| ③ | Claude Agent | Elasticsearch | Alerts, packets, and activity pushed to 3 ES indexes |
+| ④ | Claude Agent | Web Dashboard | SSE events: thinking, commands, alerts, cycle status |
+| ⑤ | Web Dashboard | Claude Agent | "Ask the Agent" chat queries forwarded to agent's HTTP API |
+| ⑥ | You (Analyst) | Web Dashboard | Access dashboard at http://localhost:5000 |
+| ⑦ | Web Dashboard | Report Generator | Triggers PDF generation: reads ES → calls Claude → builds PDF |
+| ⑧ | Web Dashboard | Kibana | Reverse proxy at /kibana/ (no direct host port — Docker Desktop limitation) |
+| ⑨ | Traffic Engine | Web Dashboard | Polls /api/target every 8s to discover the target URL |
 
 ## URL Validation Rules
 

@@ -93,7 +93,7 @@ The platform consists of 6 Docker containers orchestrated via Docker Compose, de
 **Figure 1: PacketSentry System Architecture**
 
 ![PacketSentry Architecture](architecture.svg)
-*Figure 1: High-level system architecture showing the three logical layers: Attack/Victim (Layer 1), AI Analysis (Layer 2), and Storage/Visualization (Layer 3). Numbered arrows indicate primary data flows.*
+*Figure 1: High-level system architecture showing the three logical layers: Attack Generation (Layer 1), AI Analysis (Layer 2), and Storage/Visualization (Layer 3). Numbered arrows indicate the 9 primary data flows: ① Attack traffic, ② tshark capture, ③ ES push, ④ SSE streaming, ⑤ Chat queries, ⑥ Dashboard access, ⑦ Report generation, ⑧ Kibana proxy, ⑨ Target polling.*
 
 The system is organized into three logical layers:
 
@@ -146,6 +146,9 @@ The system is organized into three logical layers:
 
 The system processes data through a continuous pipeline with the following stages:
 
+**Stage 0: Target Discovery**
+The traffic engine polls `http://dashboard:5000/api/target` every 8 seconds until a target URL is configured via the dashboard setup screen. Once set, the engine begins generating traffic against that URL.
+
 **Stage 1: Traffic Generation**
 The traffic engine (`traffic-engine/engine.py`) runs two concurrent threads: a normal traffic loop that generates HTTP requests and DNS lookups against the custom target URL, and an attack scheduler that randomly selects and executes attacks every 30-90 seconds.
 
@@ -167,17 +170,26 @@ Throughout the analysis cycle, the agent pushes events to the dashboard's SSE en
 **Stage 7: Elasticsearch Ingestion**
 The agent pushes data to three Elasticsearch indexes: `packetsentry-alerts-*` for analysis cycles, `packetsentry-packets-*` for raw packet data, and `packetsentry-activity-*` for the full agent activity log.
 
+**Stage 8: Report Generation (On Demand)**
+When triggered via the dashboard's Reports tab, the `ReportGenerator` queries all three ES indexes, sends a structured prompt to Claude (`claude-sonnet-4-6`, `max_tokens=8192`), and uses the AI-generated markdown to build a professionally formatted PDF with fpdf2. Reports include an executive summary, key findings, attack timeline, traffic analysis, recommendations, and conclusion.
+
+**Stage 9: Kibana Visualization (On Demand)**
+The dashboard proxies requests to Kibana's internal port 5601 at the `/kibana/` path, applying `server.basePath=/kibana` and `server.rewriteBasePath=true` on the Kibana side. This avoids relying on Docker Desktop's unreliable host port forwarding.
+
 ### 2.4 Component Interaction Matrix
 
 | Source Component | Target Component | Protocol | Data | Frequency |
 |-----------------|-----------------|----------|------|-----------|
 | traffic-engine | Custom Web App (user URL) | HTTP/TCP | HTTP requests, SYN packets, port scans | Continuous (1-4s interval) + attack cycles (30-90s) |
+| traffic-engine | dashboard | HTTP GET | Poll `/api/target` for target URL | Every 8s |
 | traffic-engine | external DNS | UDP/DNS | DNS lookup requests | Normal traffic loop |
 | claude-agent | host interfaces | Raw (tshark) | Packet capture data | Continuous (500-pkt buffer) |
 | claude-agent | dashboard | HTTP POST | SSE events (think, command, alert, cycle) | Every analysis cycle (8-20s) |
 | claude-agent | elasticsearch | HTTP REST | Indexed documents (alerts, packets, activity) | Per event |
 | dashboard | claude-agent | HTTP POST | User queries (/api/query) | On user action |
 | dashboard | elasticsearch | HTTP REST | Search queries, stats | On page load + 5s interval |
+| dashboard | kibana | HTTP reverse proxy | Proxies browser Kibana requests at `/kibana/` | On user navigation |
+| dashboard | Claude API (external) | HTTPS | Report generation prompt + response | On "Generate Report" click |
 | dashboard | browser | HTTP SSE | Real-time event stream | Continuous |
 
 ---

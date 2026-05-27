@@ -90,10 +90,13 @@ The platform consists of 6 Docker containers orchestrated via Docker Compose, de
 
 ### 2.1 Architecture Overview
 
-**Figure 1: PacketSentry System Architecture**
+<div align="center">
 
 ![PacketSentry Architecture](architecture.svg)
-*Figure 1: High-level system architecture showing the three logical layers: Attack Generation (Layer 1), AI Analysis (Layer 2), and Storage/Visualization (Layer 3). Numbered arrows indicate the 9 primary data flows: ① Attack traffic, ② tshark capture, ③ ES push, ④ SSE streaming, ⑤ Chat queries, ⑥ Dashboard access, ⑦ Report generation, ⑧ Kibana proxy, ⑨ Target polling.*
+
+*Figure 1: High-level system architecture showing the three logical layers*
+
+</div>
 
 The system is organized into three logical layers:
 

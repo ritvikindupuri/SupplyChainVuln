@@ -606,7 +606,7 @@ function handleAgentStatus(data) {
     stateEl.className = 'value ' + (status === 'running' || status === 'complete' ? 'green' : status === 'analyzing' ? 'yellow' : status === 'error' ? 'red' : 'blue');
 
     document.getElementById('statDetail').textContent = msg.substring(0, 60);
-    isAnalyzing = (status === 'analyzing');
+        isAnalyzing = (status === 'analyzing' || status === 'thinking');
     updateChatTab();
 }
 

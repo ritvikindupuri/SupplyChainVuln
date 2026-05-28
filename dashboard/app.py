@@ -486,7 +486,7 @@ def kibana_proxy(path):
             timeout=60,
             allow_redirects=True,
         )
-        excluded = {"content-encoding", "content-length", "transfer-encoding", "connection"}
+        excluded = {"content-encoding", "content-length", "transfer-encoding", "connection", "content-security-policy"}
         proxy_headers = Headers()
         for k, v in resp.raw.headers.items():
             if k.lower() not in excluded:

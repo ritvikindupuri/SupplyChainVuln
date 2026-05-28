@@ -51,8 +51,6 @@ services:
       - ELASTICSEARCH_PASSWORD=${ELASTIC_PASSWORD:-packetsentry}
       - SERVER_BASEPATH=/kibana
       - SERVER_REWRITEBASEPATH=true
-    ports:
-      - "5602:5601"
     networks:
       - packetsentry
     depends_on:

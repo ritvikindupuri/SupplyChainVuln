@@ -35,11 +35,7 @@ May 26, 2026
       - 3.4.2 [Dashboard Template (dashboard.html)](#342-dashboard-template-dashboardhtml)
       - 3.4.3 [SSE Real-Time Event Stream](#343-sse-real-time-event-stream)
       - 3.4.4 [Tab Interface](#344-tab-interface)
-   - 3.5 [Elasticsearch & Kibana](#35-elasticsearch--kibana)
-      - 3.5.1 [Index Templates](#351-index-templates)
-      - 3.5.2 [Kibana Data Views](#352-kibana-data-views)
-   - 3.6 [Init Setup Container](#36-init-setup-container)
-   - 3.7 [Docker Compose Orchestration](#37-docker-compose-orchestration)
+   - 3.5 [Docker Compose Orchestration](#35-docker-compose-orchestration)
 4. [Attack Scenarios](#4-attack-scenarios)
    - 4.1 [TCP SYN Port Scan (nmap -sS)](#41-tcp-syn-port-scan-nmap--ss)
    - 4.2 [SYN Flood Denial of Service (hping3)](#42-syn-flood-denial-of-service-hping3)
@@ -51,12 +47,8 @@ May 26, 2026
    - 5.1 [Event Types Reference](#51-event-types-reference)
    - 5.2 [Agent Console Streaming Flow](#52-agent-console-streaming-flow)
    - 5.3 [Claude Streaming with Tool-Use](#53-claude-streaming-with-tool-use)
-   - 5.4 [Elasticsearch Ingestion Pipeline](#54-elasticsearch-ingestion-pipeline)
 6. [Data Models & Schema](#6-data-models--schema)
-   - 6.1 [packetsentry-alerts-* Index](#61-packetsentry-alerts--index)
-   - 6.2 [packetsentry-packets-* Index](#62-packetsentry-packets--index)
-   - 6.3 [packetsentry-activity-* Index](#63-packetsentry-activity--index)
-   - 6.4 [Internal Event Data Structures](#64-internal-event-data-structures)
+   - 6.1 [Internal Event Data Structures](#61-internal-event-data-structures)
 7. [Security Considerations](#7-security-considerations)
    - 7.1 [Container Security](#71-container-security)
    - 7.2 [Network Security](#72-network-security)
@@ -76,13 +68,12 @@ PacketSentry is a fully containerized, autonomous network security platform that
 - **AI-Powered Analysis**: Packet summaries and heuristic-based alerts are fed to Anthropic's Claude API, which performs deep semantic analysis to identify threats, map them to the MITRE ATT&CK framework, and provide remediation recommendations.
 - **Streaming Intelligence**: Claude's reasoning process is streamed character-by-character to the web dashboard via Server-Sent Events (SSE), showing the agent's chain-of-thought as it happens.
 - **Autonomous Tool Execution**: Claude can decide to run tshark commands during analysis, inspect the output, and incorporate the results into its reasoning — all without human intervention.
-- **Comprehensive Logging**: Every packet, analysis cycle, thinking block, command execution, and alert is stored in Elasticsearch across three purpose-built indexes.
 - **Realistic Attack Simulation**: The traffic engine autonomously generates 6 distinct attack types using real tools (nmap, hping3) against a user-provided custom web application URL.
 - **Interactive Query Interface**: Users can ask the agent questions about current network state through the dashboard chat interface.
 
 ### Project Scope
 
-The platform consists of 6 Docker containers orchestrated via Docker Compose, deployed across a dedicated bridge network with host-networking for capture capabilities. The user provides their own custom web application URL as the target — no built-in target containers are included. It is designed for security education, demonstration, and research purposes.
+The platform consists of 3 Docker containers orchestrated via Docker Compose, deployed across a dedicated bridge network with host-networking for capture capabilities. The user provides their own custom web application URL as the target — no built-in target containers are included. It is designed for security education, demonstration, and research purposes.
 
 ---
 
@@ -104,7 +95,7 @@ The system is organized into three logical layers:
 
 **Layer 2 — AI Analysis**: The Claude agent runs with `network_mode: host`, giving it direct access to the host's network stack. It uses tshark to capture live packets (including traffic to/from your custom target), processes them through a heuristic attack detector, and sends summaries to Claude for AI-powered analysis. The agent also hosts an HTTP query API on port 8000.
 
-**Layer 3 — Storage & Visualization**: Elasticsearch stores all data across three index patterns. Kibana provides ad-hoc visualization, and the custom web dashboard delivers real-time streaming visualization via Server-Sent Events.
+**Layer 3 — Storage & Visualization**: The custom web dashboard stores all session data in-memory and delivers real-time streaming visualization via Server-Sent Events.
 
 ### 2.2 Network Topology
 
@@ -123,10 +114,10 @@ The system is organized into three logical layers:
 │  │  │  (dynamic)   │                                Web App  │   │
 │  │  └──────────────┘                                (external)│   │
 │  │                                                             │   │
-│  │  ┌──────────────┐  ┌──────────────┐  ┌─────────────────┐   │   │
-│  │  │  dashboard   │  │  es          │  │  kibana         │   │   │
-│  │  │  :5000       │──│  :9200       │  │  :5601          │   │   │
-│  │  └──────────────┘  └──────────────┘  └─────────────────┘   │   │
+│  │  ┌──────────────┐                                          │   │
+│  │  │  dashboard   │                                          │   │
+│  │  │  :5000       │                                          │   │
+│  │  └──────────────┘                                          │   │
 │  └───────────────────────────────────────────────────────────┘   │
 │                                                                   │
 │  ┌───────────────────────────────────────────────────────────┐   │
@@ -170,14 +161,11 @@ Claude may decide to run tshark commands during analysis. The agent intercepts t
 **Stage 6: Dashboard Streaming**
 Throughout the analysis cycle, the agent pushes events to the dashboard's SSE endpoint. These events include thinking deltas (character-by-character), command executions, command outputs, and cycle completions.
 
-**Stage 7: Elasticsearch Ingestion**
-The agent pushes data to three Elasticsearch indexes: `packetsentry-alerts-*` for analysis cycles, `packetsentry-packets-*` for raw packet data, and `packetsentry-activity-*` for the full agent activity log.
+**Stage 7: Dashboard Storage**
+The dashboard stores all session data — analysis cycles, alerts, packets, and activity events — in its in-memory data structures for real-time access and historical review.
 
 **Stage 8: Report Generation (On Demand)**
-When triggered via the dashboard's Reports tab, the `ReportGenerator` queries all three ES indexes, sends a structured prompt to Claude (`claude-sonnet-4-6`, `max_tokens=8192`), and uses the AI-generated markdown to build a professionally formatted PDF with fpdf2. Reports include an executive summary, key findings, attack timeline, traffic analysis, recommendations, and conclusion.
-
-**Stage 9: Kibana Visualization (On Demand)**
-The dashboard proxies requests to Kibana's internal port 5601 at the `/kibana/` path, applying `server.basePath=/kibana` and `server.rewriteBasePath=true` on the Kibana side. This avoids relying on Docker Desktop's unreliable host port forwarding.
+When triggered via the dashboard's Reports tab, the `ReportGenerator` queries the dashboard's in-memory session data, sends a structured prompt to Claude (`claude-sonnet-4-6`, `max_tokens=8192`), and uses the AI-generated markdown to build a professionally formatted PDF with fpdf2. Reports include an executive summary, key findings, attack timeline, traffic analysis, recommendations, and conclusion.
 
 ### 2.4 Component Interaction Matrix
 
@@ -187,11 +175,8 @@ The dashboard proxies requests to Kibana's internal port 5601 at the `/kibana/` 
 | traffic-engine | dashboard | HTTP GET | Poll `/api/target` for target URL | Every 8s |
 | traffic-engine | external DNS | UDP/DNS | DNS lookup requests | Normal traffic loop |
 | claude-agent | host interfaces | Raw (tshark) | Packet capture data | Continuous (500-pkt buffer) |
-| claude-agent | dashboard | HTTP POST | SSE events (think, command, alert, cycle) | Every analysis cycle (8-20s) |
-| claude-agent | elasticsearch | HTTP REST | Indexed documents (alerts, packets, activity) | Per event |
+| claude-agent | dashboard | HTTP POST | SSE events (think, command, alert, cycle) + session data for storage | Every analysis cycle (8-20s) |
 | dashboard | claude-agent | HTTP POST | User queries (/api/query) | On user action |
-| dashboard | elasticsearch | HTTP REST | Search queries, stats | On page load + 5s interval |
-| dashboard | kibana | HTTP reverse proxy | Proxies browser Kibana requests at `/kibana/` | On user navigation |
 | dashboard | Claude API (external) | HTTPS | Report generation prompt + response | On "Generate Report" click |
 | dashboard | browser | HTTP SSE | Real-time event stream | Continuous |
 
@@ -209,7 +194,7 @@ The Claude agent (`claude-agent/`) is the core intelligence of the platform. It 
 
 The orchestrator is the main entry point and control loop. It initializes the packet capture system, the attack detector, and the HTTP query server, then enters an infinite analysis loop.
 
-**Session Management**: Each agent instance generates a unique 8-character session ID (`SESSION_ID`). This ID is included in all dashboard events and Elasticsearch documents, enabling data correlation across all indexes.
+**Session Management**: Each agent instance generates a unique 8-character session ID (`SESSION_ID`). This ID is included in all dashboard events, enabling data correlation across the session.
 
 **Dual-Thread Architecture**:
 - **Main thread**: Runs the agent analysis loop
@@ -222,9 +207,8 @@ The orchestrator is the main entry point and control loop. It initializes the pa
 4. Run heuristic attack detection on the packets
 5. Initiate streaming Claude analysis (see Section 3.1.4)
 6. Process Claude's final JSON analysis
-7. Push alerts to dashboard and Elasticsearch
-8. Push sample packets to Elasticsearch
-9. **Autonomous stop check** — evaluate session lifecycle criteria and stop if conditions are met (see Section 3.1.4a)
+7. Push alerts and data to dashboard
+8. **Autonomous stop check** — evaluate session lifecycle criteria and stop if conditions are met (see Section 3.1.4a)
 
 **Key Functions**:
 
@@ -234,8 +218,7 @@ The orchestrator is the main entry point and control loop. It initializes the pa
 | `analyze_with_claude_streaming()` | Orchestrates streaming Claude analysis with tool-use |
 | `ask_claude_question()` | Handles interactive user queries |
 | `push_to_dashboard()` | Sends events to dashboard API |
-| `push_to_elasticsearch()` | Sends documents to ES indexes |
-| `log_activity()` | Logs events to activity index + local buffer |
+| `log_activity()` | Logs events to local buffer |
 | `execute_tshark()` | Runs tshark commands via subprocess |
 | `generate_fallback_analysis()` | Provides offline analysis when API key is missing |
 | `extract_json_analysis()` | Parses Claude's JSON response from text output |
@@ -352,7 +335,7 @@ The agent does not run indefinitely — it stops autonomously once session objec
 
 ##### Completion Guardrails (Human-Like Stopping)
 
-For a real security tool, “no alerts” is not sufficient evidence to declare a target fully investigated. PacketSentry therefore enforces additional guardrails around Claude’s completion decision so it behaves like a human penetration tester / network security engineer:
+For a real security tool, "no alerts" is not sufficient evidence to declare a target fully investigated. PacketSentry therefore enforces additional guardrails around Claude's completion decision so it behaves like a human penetration tester / network security engineer:
 
 **1) Active verification requirement (`MIN_TOOL_CALLS_FOR_COMPLETE`)**
 
@@ -364,12 +347,12 @@ If Claude attempts to set `analysis_complete: true` before meeting this threshol
 
 **Why this matters**
 
-- Prevents premature “all clear” based on silence, missing traffic, or weak heuristics
+- Prevents premature "all clear" based on silence, missing traffic, or weak heuristics
 - Encourages multi-angle verification (broad stats, targeted capture, deep inspection), which mirrors human workflow
 
 **2) Completion rationale requirement**
 
-When Claude sets `analysis_complete: true`, it must include a clearly labeled **“Completion rationale”** section inside the `analysis` field. This rationale is required to contain:
+When Claude sets `analysis_complete: true`, it must include a clearly labeled **"Completion rationale"** section inside the `analysis` field. This rationale is required to contain:
 
 - A list of investigative checks performed (including the tool commands executed and what each result demonstrated)
 - Why remaining hypotheses are low value / not testable with network-only visibility
@@ -431,13 +414,13 @@ The tool-use execution loop is a key architectural component that enables Claude
    d. Agent executes the tool (run_tshark, capture_packets, get_statistics)
    e. Agent captures stdout/stderr (up to 10,000 chars)
    f. Agent pushes "agent_command_output" event with results
-   g. Agent logs output to activity index
+   g. Agent logs output to local buffer
    h. Tool result is appended to message history
    i. New iteration begins: Claude continues with tool result context
 4. When Claude stops (stop_reason != "tool_use"):
    a. Agent extracts final JSON analysis
    b. Agent pushes "agent_cycle_complete" event
-   c. Agent stores analysis in Elasticsearch alerts index
+   c. Agent stores analysis in dashboard session data
 5. If no tool is used:
    a. Agent uses accumulated text or final message text
    b. Extracts JSON analysis
@@ -524,7 +507,7 @@ The validation logic recognizes common hosting platforms and generates contextua
 
 **File**: `dashboard/app.py` — 466 lines
 
-**Companion Module**: `dashboard/report_generator.py` — 616 lines. A separate module that handles async PDF report generation via fpdf2. It queries Elasticsearch for all session data (alerts, packets, activity), feeds a structured prompt to Claude (`claude-sonnet-4-6`, `max_tokens=8192`), and uses the returned markdown to build a professionally formatted PDF. Falls back to heuristic analysis if the Claude API call fails. Exposes 3 endpoints through app.py: generate, status (file-based `.status.json` polling), and download.
+**Companion Module**: `dashboard/report_generator.py` — 616 lines. A separate module that handles async PDF report generation via fpdf2. It queries the dashboard's in-memory session data (alerts, packets, activity), feeds a structured prompt to Claude (`claude-sonnet-4-6`, `max_tokens=8192`), and uses the returned markdown to build a professionally formatted PDF. Falls back to heuristic analysis if the Claude API call fails. Exposes 3 endpoints through app.py: generate, status (file-based `.status.json` polling), and download.
 
 **Key features**:
 - **AI-generated content**: The `_claude_report()` method sends a prompt demanding 5-8 paragraphs per section in formal FAANG-level tone. Each finding includes description, severity rationale, MITRE ATT&CK mapping, confidence score, technical analysis, and remediation steps.
@@ -532,7 +515,7 @@ The validation logic recognizes common hosting platforms and generates contextua
 - **Professional PDF design**: Cover page with navy header band (90mm), blue accent stripe, metadata box, severity bar chart with color-coded bars (critical red, high orange, medium yellow, low green). Content pages with card-styled findings, separator lines, and color-coded recommendations (P0 red, P1 orange, P2 navy).
 - **File-based status tracking**: Report generation is async. A `.status.json` file is written atomically — `{"status": "generating"}` initially, then `{"status": "complete", "progress": 100, "path": "..."}`, or `{"status": "error", "error": "..."}` on failure.
 
-The dashboard is a Flask application with gunicorn serving 4 worker processes. It serves as both the real-time visualization layer and the API gateway between the agent, Elasticsearch, and the browser.
+The dashboard is a Flask application with gunicorn serving 4 worker processes. It serves as both the real-time visualization layer and the API gateway between the agent and the browser.
 
 **SSE Event Queue**: A thread-safe `queue.Queue(maxsize=2000)` buffers incoming events from the agent. The SSE endpoint reads from this queue with a 25-second timeout, sending heartbeat pings to keep the connection alive.
 
@@ -566,8 +549,8 @@ The dashboard is a Flask application with gunicorn serving 4 worker processes. I
 | `/api/activity` | GET | Activity feed |
 | `/api/ask` | POST | Forwards user query to agent |
 | `/api/packets/recent` | GET | Most recent packets from in-memory buffer |
-| `/api/search/packets` | GET | ES search for packet data |
-| `/api/stats` | GET | ES document counts + severity breakdown |
+| `/api/search/packets` | GET | Search packet data from in-memory buffer |
+| `/api/stats` | GET | Session data counts + severity breakdown |
 | `/api/report/generate` | POST | Triggers async PDF report generation with Claude |
 | `/api/report/status/<id>` | GET | Poll report generation status (file-based) |
 | `/api/report/download/<id>` | GET | Download generated PDF report |
@@ -601,7 +584,7 @@ A single-page application with dark-themed styling designed for SOC/NOC monitori
 | `updatePacketTable()` | Adds new packet rows to the table |
 | `sendChat()` | Sends user question to `/api/ask`, displays response |
 | `filterAlerts()` | Filters displayed alerts by severity |
-| `refreshESStats()` | Polls `/api/stats` every 5 seconds for sidebar stats |
+| `refreshStats()` | Polls `/api/stats` every 5 seconds for sidebar stats |
 | `clearConsole()` | Empties the Agent Console |
 | `scrollConsole()` | Toggles auto-scroll behavior |
 | `showTab()` | Switches between 4 dashboard tabs |
@@ -657,114 +640,27 @@ An interactive chat interface where users send questions about current network s
 A PDF report generation interface with:
 
 - Three button states: Generate, Generating (spinner), Download
-- Report generation is async — `POST /api/report/generate` triggers the `ReportGenerator` to query ES, call Claude (`claude-sonnet-4-6`, `max_tokens=8192`), and build a PDF with the AI-generated content
+- Report generation is async — `POST /api/report/generate` triggers the `ReportGenerator` to query the dashboard's in-memory session data, call Claude (`claude-sonnet-4-6`, `max_tokens=8192`), and build a PDF with the AI-generated content
 - Status polling via `GET /api/report/status/<id>` (file-based `.status.json`)
 - Download via `GET /api/report/download/<id>` when complete
 - The payload sent to Claude includes the top 200 alerts, 100 recent packets, 200 activity entries, severity breakdown, and top 20 alerts with full context (MITRE mappings, confidence, remediation). Claude's prompt demands 5-8 paragraph sections in formal FAANG-level tone.
 - Fallback report generation uses heuristic analysis from the AttackDetector data if the Claude API key is not configured or the API call fails
 
-### 3.5 Elasticsearch & Kibana
-
-#### 3.5.1 Index Templates
-
-Three index templates are created automatically by the init-setup container. Each template defines settings and mappings for its matching index pattern.
-
-**Template: packetsentry_alerts** (pattern: `packetsentry-alerts-*`)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `@timestamp` | date | Event timestamp |
-| `session` | keyword | Agent session identifier |
-| `event_type` | keyword | "analysis_cycle" or "alert" |
-| `cycle_id` | keyword | Analysis cycle identifier |
-| `severity` | keyword | "low", "medium", "high", "critical" |
-| `protocol` | keyword | Network protocol |
-| `src_ip` | ip | Source IP address |
-| `src_port` | integer | Source port |
-| `dst_ip` | ip | Destination IP address |
-| `dst_port` | integer | Destination port |
-| `packet_count` | integer | Packets in this cycle |
-| `alert_count` | integer | Heuristic alerts triggered |
-| `threat_level` | keyword | AI-determined threat level |
-| `claude_analysis` | text | Claude's full analysis text |
-| `attack_name` | keyword | Identified attack name |
-| `mitre_tactic` | keyword | MITRE ATT&CK tactic ID |
-| `mitre_technique` | keyword | MITRE ATT&CK technique ID |
-| `remediation` | text | JSON array of recommendations |
-| `confidence` | float | AI confidence score (0.0-1.0) |
-| `thinking_blocks` | text | JSON array of Claude's thinking blocks |
-| `tool_calls` | text | JSON array of tool executions |
-| `raw_pcap_ref` | keyword | PCAP file reference |
-
-**Template: packetsentry_packets** (pattern: `packetsentry-packets-*`)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `@timestamp` | date | Packet timestamp |
-| `session` | keyword | Agent session |
-| `cycle` | integer | Analysis cycle number |
-| `frame_len` | integer | Packet length in bytes |
-| `ip_src` | ip | Source IP |
-| `ip_dst` | ip | Destination IP |
-| `ip_proto` | keyword | IP protocol number |
-| `src_port` | integer | Source port |
-| `dst_port` | integer | Destination port |
-| `protocol` | keyword | Protocol name (HTTP, DNS, TCP, etc.) |
-| `info` | text | TShark info column |
-
-**Template: packetsentry_activity** (pattern: `packetsentry-activity-*`)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `@timestamp` | date | Activity timestamp |
-| `session` | keyword | Agent session |
-| `event_type` | keyword | Activity type (thinking_block, tool_execution, etc.) |
-| `cycle_id` | keyword | Associated cycle |
-| `data` | object | Arbitrary activity payload |
-
-#### 3.5.2 Kibana Data Views
-
-Three Kibana data views are auto-created by the init-setup script, enabling immediate exploration in Kibana's Discover and Dashboard apps:
-
-1. **PacketSentry Alerts** — Time-series analysis of threat levels, attack types, and AI analysis
-2. **PacketSentry Packets** — Raw packet data exploration by IP, port, protocol
-3. **PacketSentry Activity** — Complete agent audit trail for forensic analysis
-
-### 3.6 Init Setup Container
-
-**Container**: `init-setup` — Alpine Linux with curl and jq
-
-The init-setup container runs once at infrastructure startup and performs the following:
-
-1. **Wait for Elasticsearch**: Polls `http://elasticsearch:9200/_cluster/health` until the cluster is available
-2. **Create Index Templates**: PUTs three index templates via Elasticsearch's `_index_template` API
-3. **Wait for Kibana**: Polls `http://kibana:5601/api/status` until Kibana is ready
-4. **Create Data Views**: POSTs three data view definitions to Kibana's `api/data_views/data_view` endpoint
-
-The container exits with code 0 after completion ("restart: no" policy).
-
-### 3.7 Docker Compose Orchestration
+### 3.5 Docker Compose Orchestration
 
 **File**: `docker-compose.yml` — 142 lines
 
-The orchestrator defines 6 services across a custom bridge network (`packetsentry`, subnet 172.30.0.0/24).
+The orchestrator defines 3 services across a custom bridge network (`packetsentry`, subnet 172.30.0.0/24).
 
 **Key Configuration Details**:
 
 | Service | Network Mode | Capabilities | Volumes | Profiles |
 |---------|-------------|--------------|---------|----------|
-| elasticsearch | bridge | — | `es_data` (persistent) | — |
-| kibana | bridge | — | — | — |
-| init-setup | bridge | — | `./elasticsearch/init.sh` (ro) | — |
 | traffic-engine | bridge | — | — | — |
 | claude-agent | **host** | `NET_ADMIN`, `NET_RAW`, `SYS_ADMIN` | `pcap_storage`, `/var/run/docker.sock:ro` | **attack** |
 | dashboard | bridge | — | — | — |
 
 **Two-Phase Startup**: The agent uses Docker Compose profiles. Phase 1 starts infrastructure services without the agent (`docker compose up -d`). Phase 2 starts the agent with `--profile attack`, ensuring it only launches after all dependencies are healthy.
-
-**Healthchecks**: Elasticsearch and Kibana include healthcheck directives with retry logic:
-- Elasticsearch: `curl -sf -u elastic:$PASS http://localhost:9200/_cluster/health` (15s interval, 15 retries, 40s start period)
-- Kibana: `curl -sf http://localhost:5601/api/status` (inside container, accessed via dashboard proxy at /kibana/)
 
 **Logging**: All services use JSON-file logging driver with 10MB max size and 3-file rotation.
 
@@ -927,114 +823,13 @@ The Claude streaming integration is the most architecturally significant compone
 
 This preserves conversation context across tool executions.
 
-### 5.4 Elasticsearch Ingestion Pipeline
-
-The agent sends documents to Elasticsearch in real-time. Each document type has a specific purpose:
-
-**Alert Documents** (per analysis cycle):
-```
-1 document → packetsentry-alerts-000001
-{
-  "@timestamp": "...",
-  "session": "a1b2c3d4",
-  "event_type": "analysis_cycle",
-  "cycle_id": "cycle_1717000000",
-  "packet_count": 45,
-  "alert_count": 3,
-  "threat_level": "high",
-  "claude_analysis": "The SYN flood detected from...",
-  "attack_name": "SYN Flood DoS",
-  "mitre_tactic": "TA0040 - Impact",
-  "mitre_technique": "T1498 - Network DoS",
-  "remediation": "[\"Rate-limit SYNs\", \"Enable SYN cookies\"]",
-  "confidence": 0.88,
-  "thinking_blocks": "[...JSON array of thinking text...]",
-  "tool_calls": "[...JSON array of tool executions...]",
-  "session": "a1b2c3d4"
-}
-```
-
-**Packet Documents** (per cycle, up to 5):
-```
-5 documents → packetsentry-packets-000001
-{
-  "@timestamp": "1717000000.123",
-  "session": "a1b2c3d4",
-  "cycle": 1,
-  "frame_len": 64,
-  "ip_src": "172.30.0.20",
-  "ip_dst": "172.30.0.10",
-  "ip_proto": "6",
-  "src_port": 54321,
-  "dst_port": 80,
-  "protocol": "TCP",
-  "info": "SYN → 80"
-}
-```
-
-**Activity Documents** (per event):
-```
-N documents → packetsentry-activity-000001
-{
-  "@timestamp": "...",
-  "session": "a1b2c3d4",
-  "event_type": "thinking_block",
-  "cycle_id": "cycle_1717000000",
-  "data": {"text": "I see a SYN flood..."}
-}
-```
-
 ---
 
 ## 6. Data Models & Schema
 
-### 6.1 packetsentry-alerts-* Index
+### 6.1 Internal Event Data Structures
 
-**Purpose**: Stores analysis cycle results and security alerts. Each analysis cycle produces one document plus any heuristic alerts that occurred between cycles.
-
-**Mapping Type**: Time-series with keyword, ip, integer, text, and float fields.
-
-**Use Cases**:
-- Kibana: Threat level distribution over time, top attack types, MITRE technique frequency
-- Dashboard: Alert feed, analysis history, severity breakdown
-- Forensics: Replay past analyses with full thinking blocks and tool calls
-
-### 6.2 packetsentry-packets-* Index
-
-**Purpose**: Stores raw packet field extractions from tshark. Provides granular network data for forensic analysis.
-
-**Mapping Type**: Time-series with ip, integer, keyword, and text fields.
-
-**Use Cases**:
-- Kibana: IP conversation analysis, protocol distribution, port activity
-- Dashboard: Live packet table display
-- Forensics: Identify which IPs communicated on which ports
-
-### 6.3 packetsentry-activity-* Index
-
-**Purpose**: Stores every action the agent takes — a complete audit trail. This index enables full replay of any analysis session.
-
-**Mapping Type**: Time-series with keyword and object fields.
-
-**Event Types Stored**:
-- `cycle_start` — Analysis cycle began
-- `thinking_block` — Claude's text output
-- `tool_use_start` — Claude requested a tool
-- `tool_execution` — Agent began executing a tool
-- `tool_output` — Tool execution result
-- `cycle_complete` — Analysis cycle finished
-- `command_execution` — TShark command run
-- `command_output` — TShark output
-- `error` — Any error encountered
-
-**Use Cases**:
-- Debugging: Replay the exact sequence of events that led to an analysis
-- Forensics: Determine what the agent knew at any point in time
-- Compliance: Demonstrate that every action was logged
-
-### 6.4 Internal Event Data Structures
-
-**Packet Dictionary** (internal format before ES mapping):
+**Packet Dictionary** (internal format):
 ```python
 {
     "timestamp": "1717000000.123456",
@@ -1096,18 +891,16 @@ N documents → packetsentry-activity-000001
 ### 7.2 Network Security
 
 - **Attack Containers**: The traffic-engine exists on a dedicated bridge network, isolating its traffic from other Docker networks. Attacks leave the bridge network to reach the external custom target.
-- **Port Exposure**: The dashboard (5000) and ES (9200) ports are exposed to the host. Kibana is accessed through the dashboard's reverse proxy at `/kibana/` to work around Docker Desktop for Windows port forwarding limitations. In production, these should be restricted to localhost or placed behind a reverse proxy with authentication.
-- **Elasticsearch Authentication**: ES is configured with `xpack.security.enabled=true` and uses basic authentication. The default password should be changed in production.
+- **Port Exposure**: The dashboard port (5000) is exposed to the host. In production, this should be restricted to localhost or placed behind a reverse proxy with authentication.
 
 ### 7.3 API Key Management
 
 - The Anthropic API key is passed as an environment variable (`ANTHROPIC_API_KEY`) and read from a `.env` file. This file is in `.gitignore` but should be carefully managed.
 - The agent logs when the API key is missing or invalid, falling back to heuristic-only analysis.
-- API keys are stored in memory only and are not logged to Elasticsearch.
+- API keys are stored in memory only and are not logged.
 
 ### 7.4 Data Isolation
 
-- Elasticsearch data volumes (`es_data`) persist across container restarts. Running `docker compose down -v` will delete all indexed data.
 - PCAP files are stored in a Docker volume (`pcap_storage`) and persist until explicitly cleaned.
 - All data in this project is synthetic/fake. No real credentials, personal data, or sensitive information is used.
 
@@ -1121,7 +914,7 @@ PacketSentry demonstrates a novel approach to autonomous network security analys
 
 2. **Streaming AI Analysis**: By leveraging Claude's streaming API with tool-use capabilities, the system provides transparent, real-time visibility into the AI's reasoning process — an improvement over traditional "black box" AI security tools.
 
-3. **Comprehensive Observability**: Every action taken by the agent — every thought, every command executed, every packet analyzed — is logged to Elasticsearch across three purpose-built indexes, enabling full forensic replay and analysis.
+3. **Comprehensive Observability**: Every action taken by the agent — every thought, every command executed, every packet analyzed — is stored in the dashboard's in-memory session data, enabling full forensic replay and analysis.
 
 The platform's modular architecture allows each component to be developed, tested, and deployed independently. The two-phase startup process ensures infrastructure dependencies are healthy before the AI agent begins analysis.
 
@@ -1129,19 +922,18 @@ The platform's modular architecture allows each component to be developed, teste
 
 - **6 real attack types** generated with production tools (nmap, hping3)
 - **Real-time streaming** of AI reasoning with typewriter-fidelity rendering
-- **3 Elasticsearch indexes** with complete audit trail
-- **6-service Docker orchestration** with healthchecks and profiles
+- **In-memory session data** with complete audit trail
+- **3-service Docker orchestration** with healthchecks and profiles
 - **Zero mock data** — all traffic is generated live, all analysis is real
 - **User-provided target URL** — attack any custom web app you own, no built-in targets
 
 ### Limitations & Future Work
 
 - **Host networking requirement** limits cross-platform compatibility
-- **Single-node Elasticsearch** lacks redundancy for production use
 - **Attack detection** relies on heuristic pre-filtering before AI analysis
 - **No active response** — the agent currently detects and reports but does not block traffic
 
 ---
 
 *Document version 1.0 — May 26, 2026*
-*Built with Anthropic Claude API, Wireshark/tshark, Elasticsearch, Docker*
+*Built with Anthropic Claude API, Wireshark/tshark, Docker*

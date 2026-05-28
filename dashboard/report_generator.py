@@ -69,17 +69,14 @@ class FPDF2(FPDF):
 CLAUDE_MODEL = os.getenv("CLAUDE_MODEL", "claude-sonnet-4-6")
 
 class ReportGenerator:
-    def __init__(self, es_url, es_user, es_pass, claude_api_key):
-        self.es_url = es_url
-        self.es_user = es_user
-        self.es_pass = es_pass
+    def __init__(self, claude_api_key):
         self.claude_api_key = claude_api_key
         os.makedirs(REPORTS_DIR, exist_ok=True)
 
-    def generate(self, report_id, target_url=""):
-        alerts = self._es_search("packetsentry-alerts-*", 200)
-        packets = self._es_search("packetsentry-packets-*", 100)
-        activity = self._es_search("packetsentry-activity-*", 200)
+    def generate(self, report_id, target_url="", alerts=None, packets=None, activity=None):
+        alerts = alerts or []
+        packets = packets or []
+        activity = activity or []
 
         alert_count = len(alerts)
         packet_count = len(packets)
@@ -88,21 +85,20 @@ class ReportGenerator:
         severity_counts = {"low": 0, "medium": 0, "high": 0, "critical": 0}
         top_alerts = []
         for a in alerts:
-            src = a.get("_source", {})
-            sev = src.get("severity", "low")
+            sev = (a.get("severity") or "low").lower()
             if sev in severity_counts:
                 severity_counts[sev] += 1
             if len(top_alerts) < 20:
                 top_alerts.append({
                     "severity": sev,
-                    "threat_level": src.get("threat_level", ""),
-                    "attack_name": src.get("attack_name", ""),
-                    "mitre_tactic": src.get("mitre_tactic", ""),
-                    "mitre_technique": src.get("mitre_technique", ""),
-                    "confidence": src.get("confidence", 0),
-                    "claude_analysis": (src.get("claude_analysis", "") or "")[:500],
-                    "timestamp": src.get("@timestamp", ""),
-                    "remediation": src.get("remediation", []),
+                    "threat_level": a.get("threat_level", ""),
+                    "attack_name": a.get("attack_name", ""),
+                    "mitre_tactic": a.get("mitre_tactic", ""),
+                    "mitre_technique": a.get("mitre_technique", ""),
+                    "confidence": a.get("confidence", 0),
+                    "claude_analysis": (a.get("claude_verdict", "") or "")[:500],
+                    "timestamp": a.get("timestamp", ""),
+                    "remediation": a.get("remediation", []),
                 })
 
         report_md = self._claude_report(alerts, packets, activity, severity_counts, top_alerts, target_url)
@@ -110,18 +106,6 @@ class ReportGenerator:
         pdf_path = os.path.join(REPORTS_DIR, f"{report_id}.pdf")
         self._build_pdf(pdf_path, report_md, alert_count, packet_count, activity_count, severity_counts, top_alerts, target_url=target_url)
         return pdf_path
-
-    def _es_search(self, index, size):
-        try:
-            r = requests.get(
-                f"{self.es_url}/{index}/_search",
-                json={"query": {"match_all": {}}, "size": size, "sort": [{"@timestamp": "desc"}]},
-                auth=(self.es_user, self.es_pass),
-                timeout=15
-            )
-            return r.json().get("hits", {}).get("hits", [])
-        except:
-            return []
 
     def _claude_report(self, alerts, packets, activity, severity_counts, top_alerts, target_url=""):
         prompt = self._build_prompt(alerts, packets, activity, severity_counts, top_alerts, target_url)

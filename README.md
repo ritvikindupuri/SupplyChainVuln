@@ -12,7 +12,7 @@ flowchart TD
         TE["Traffic Engine<br/>nmap / hping3 / Python<br/>6 attack types"]
         CWA["Your Custom Web App<br/>User-provided URL<br/>localhost / LAN / Netlify / Vercel"]
         TE -->|"① Attacks + Normal traffic"| CWA
-        TE -.->|"⑨ Poll /api/target every 8s"| DASH
+        TE -.->|"⑧ Poll /api/target every 8s"| DASH
     end
 
     subgraph L2["LAYER 2 — AI ANALYSIS"]
@@ -20,23 +20,18 @@ flowchart TD
         AG["Claude AI Security Agent<br/><br/>▸ Packet Capture (tshark -i any)<br/>▸ Attack Detection (pattern matching)<br/>▸ Claude Analysis (streaming + tool-use)<br/>▸ HTTP Query API (port 8000)<br/>▸ Ask Agent chat handler<br/><br/>Autonomous stop via analysis_complete"]
     end
 
-    subgraph L3["LAYER 3 — STORAGE & VISUALIZATION"]
-        ES[("Elasticsearch<br/>Index: alerts-* / packets-* / activity-*")]
-        KB["Kibana<br/>Data visualization & dashboards"]
-        DASH["Web Dashboard :5000<br/>Setup | Console | Alerts | Packets | Chat<br/>SSE real-time streaming"]
-        RG["Report Generator<br/>Queries ES → Calls Claude →<br/>Professional PDF report"]
+    subgraph L3["LAYER 3 — DASHBOARD & REPORTING"]
+        DASH["Web Dashboard :5000<br/>Console | Alerts | Packets | Chat | Reports<br/>SSE real-time streaming"]
+        RG["Report Generator<br/>Reads session data → Calls Claude →<br/>Professional PDF report"]
     end
 
     CWA -->|"② Captured via host networking (tshark)"| AG
-    AG -->|"③ Push alerts + packets + activity"| ES
-    AG -->|"④ SSE events + analysis"| DASH
-    ES -.->|Query| KB
-    DASH -.->|"⑤ User chat queries"| AG
-    DASH -.->|"⑧ Proxy /kibana/"| KB
-    DASH -->|"⑦ Generate report"| RG
+    AG -->|"③ SSE events + analysis"| DASH
+    DASH -.->|"④ User chat queries"| AG
+    DASH -->|"⑤ Generate report"| RG
     RG -.->|"Calls Claude API"| API["Claude API<br/>(Anthropic)"]
     USER["👤 Security Analyst (You)"] -->|"⑥ Access http://localhost:5000"| DASH
-    DASH -.->|"Start New Session → Agent resets,<br/>waits for next target"| AG
+    DASH -.->|"⑦ Start New Session → Agent resets,<br/>waits for next target"| AG
 ```
 
 ### Data Flow (numbered arrows in the diagram)
@@ -45,20 +40,19 @@ flowchart TD
 |---|------|----|------|
 | ① | Traffic Engine | Your Custom Web App | Real attacks: SYN flood, port scan, Slowloris, DNS amp, dir bust, TCP scan |
 | ② | Your Custom Web App | Claude Agent | Traffic captured via `tshark -i any` (host networking) |
-| ③ | Claude Agent | Elasticsearch | Alerts, packets, and activity pushed to 3 ES indexes |
-| ④ | Claude Agent | Web Dashboard | SSE events: thinking, commands, alerts, cycle status |
-| ⑤ | Web Dashboard | Claude Agent | "Ask the Agent" chat queries forwarded to agent's HTTP API |
+| ③ | Claude Agent | Web Dashboard | SSE events: thinking, commands, alerts, analysis results, session state |
+| ④ | Web Dashboard | Claude Agent | "Ask the Agent" chat queries forwarded to agent's HTTP API |
+| ⑤ | Web Dashboard | Report Generator | Triggers PDF generation: reads session data → calls Claude → builds PDF |
 | ⑥ | You (Analyst) | Web Dashboard | Access dashboard at http://localhost:5000 |
-| ⑦ | Web Dashboard | Report Generator | Triggers PDF generation: reads ES → calls Claude → builds PDF |
-| ⑧ | Web Dashboard | Kibana | Reverse proxy at /kibana/ (no direct host port — Docker Desktop limitation) |
-| ⑨ | Traffic Engine | Web Dashboard | Polls /api/target every 8s to discover the target URL |
+| ⑦ | Web Dashboard | Claude Agent | "Start New Session" clears target, agent waits for next URL |
+| ⑧ | Traffic Engine | Web Dashboard | Polls /api/target every 8s to discover the target URL |
 
 ## Prerequisites
 
 - **Docker 24+** and **Docker Compose v2** (Docker Desktop on Windows/Mac, or Docker Engine on Linux)
 - **WSL2 backend** on Windows (Docker Desktop with WSL2 is required for host networking support)
 - **Anthropic API key** — get one at https://console.anthropic.com
-- Minimum **8GB RAM**, **20GB free disk**
+- Minimum **4GB RAM**, **10GB free disk**
 - A **custom web application** you own or are authorized to test (can be on localhost, LAN, or a private server)
 
 ## Quick Start
@@ -73,16 +67,13 @@ cd PacketSentry
 # Create .env from template and edit it
 cp .env.example .env
 # Edit .env and set ANTHROPIC_API_KEY=sk-ant-... (REQUIRED)
-# All other variables have safe defaults:
-#   ELASTIC_PASSWORD=packetsentry
-#   CLAUDE_MODEL=claude-sonnet-4-6
+# CLAUDE_MODEL=claude-sonnet-4-6 (optional, defaults shown)
+# MIN_TOOL_CALLS_FOR_COMPLETE=3 (optional, defaults shown)
 
-# Start infrastructure (ES, Kibana, Dashboard, Traffic Engine)
+# Start infrastructure (Dashboard, Traffic Engine)
 docker compose up -d
 
-# Wait 60-90 seconds for all healthchecks to pass
-docker compose logs -f init-setup
-# Expected output: "[+] Setup complete."
+# Wait ~10 seconds
 ```
 
 ### Phase 2 — Configure Target & Start Agent
@@ -148,10 +139,10 @@ A feed of all detected security alerts sorted by severity with filter buttons.
 Raw packet table showing source/destination IPs, ports, protocol, info summary, and frame length.
 
 ### 4. Ask the Agent
-Chat interface to ask about current network state, specific hosts, or protocols. Grayed out during active analysis.
+Chat interface to ask about current network state, specific hosts, or protocols. Usable during and after analysis.
 
 ### 5. Reports
-Generate downloadable PDF reports with content written by Claude AI. Click "Generate Report" — Claude analyzes all session data from Elasticsearch (alerts, packets, activity) and produces a professionally formatted PDF with:
+Generate downloadable PDF reports with content written by Claude AI. Click "Generate Report" — Claude analyzes all session data (alerts, packets, activity) and produces a professionally formatted PDF with:
 - **Cover page**: white/blue design with severity bar chart, metadata box
 - **Executive Summary**: AI-generated security posture overview with business impact
 - **Key Findings**: detailed findings with severity, MITRE ATT&CK mapping, confidence, remediation steps
@@ -169,9 +160,8 @@ Falls back to heuristic analysis if the Claude API call fails.
 3. Once validated, the **Claude agent** begins capturing all traffic to/from your target via tshark
 4. The **traffic engine** starts generating real attack traffic (nmap scans, SYN floods, directory brute force, Slowloris) against your target
 5. The agent detects attacks, runs tshark commands to investigate, and streams its analysis to the dashboard in real-time
-6. All data (alerts, packets, activity) is logged to Elasticsearch for later querying
-7. The agent **stops autonomously** — Claude itself decides when analysis is complete based on what it found about the target. Simple sites finish in fewer cycles; complex apps get deeper investigation. Safety limits prevent infinite loops.
-8. After completion, the agent **waits for a new target** — click "Start New Session" on the session card to run again without restarting containers
+6. The agent **stops autonomously** — Claude itself decides when analysis is complete based on what it found about the target. Simple sites finish in fewer cycles; complex apps get deeper investigation. Safety limits prevent infinite loops.
+7. After completion, the agent **waits for a new target** — click "Start New Session" on the session card to run again without restarting containers
 
 ## How the Agent Works
 
@@ -181,10 +171,9 @@ Falls back to heuristic analysis if the Claude API call fails.
    - Packet summaries + alerts are sent to Claude with tool-use capability
    - Claude's streaming responses push to the dashboard in real-time via SSE
    - Claude runs tshark commands mid-analysis and uses the output for deeper investigation
-4. **Log Everything**: Every thinking block, command, output, alert, and analysis is stored in Elasticsearch
-5. **Stop Autonomously**: Claude itself decides when analysis is complete (`analysis_complete` flag). A simple static site finishes in 1-2 cycles; a complex app gets deeper investigation. `MAX_CYCLES` (default 8) is a safety limit, and `NO_ALERT_STOP` (default 3) catches clean targets early.
-6. **Multi-Session**: After a session completes, click "Start New Session" on the dashboard to enter a new target URL — the agent handles it without any container restarts
-7. **Ask**: Chat interface lets you query the agent directly about current network state
+4. **Stop Autonomously**: Claude itself decides when analysis is complete (`analysis_complete` flag). A simple static site finishes in 1-2 cycles; a complex app gets deeper investigation. `MAX_CYCLES` (default 8) is a safety limit, and `NO_ALERT_STOP` (default 3) catches clean targets early.
+5. **Multi-Session**: After a session completes, click "Start New Session" on the dashboard to enter a new target URL — the agent handles it without any container restarts
+6. **Ask**: Chat interface lets you query the agent directly about current network state
 
 The session lifecycle is: **Starting** → **Waiting** (for target URL) → **Analyzing** (N cycles) → **Complete** → **Waiting** (for next target). The entire process runs without manual intervention after the target URL is configured.
 
@@ -228,8 +217,6 @@ Lovable-generated apps work especially well because they contain realistic login
 | Interface | URL | Credentials |
 |-----------|-----|-------------|
 | **PacketSentry Dashboard** | http://localhost:5000 | None (setup screen first) |
-| **Elasticsearch REST API** | http://localhost:9200 | `elastic` / `packetsentry` |
-| **Kibana** (via Dashboard proxy) | http://localhost:5000/kibana/ | `elastic` / `packetsentry` |
 
 ## Services
 
@@ -238,53 +225,6 @@ Lovable-generated apps work especially well because they contain realistic login
 | **Claude Agent** | `packetsentry-agent` | 8000 (query API) | AI security analyst with tshark |
 | **Traffic Engine** | `packetsentry-engine` | — | Generates normal + attack traffic |
 | **Dashboard** | `packetsentry-dashboard` | 5000:5000 | Real-time web UI with SSE streaming |
-| **Elasticsearch** | `packetsentry-es` | 9200:9200 | Alert + packet + activity storage |
-| **Kibana** | `packetsentry-kibana` | (proxied via dashboard at /kibana/) | Data visualization |
-| **Init Setup** | `packetsentry-init` | — | Creates ES templates + data views |
-
-## Using Elasticsearch
-
-All data the agent generates is stored in Elasticsearch for querying, analysis, and long-term retention.
-
-### Credentials
-
-| Field | Value |
-|-------|-------|
-| **URL** | `http://localhost:9200` |
-| **Username** | `elastic` |
-| **Password** | `packetsentry` (or whatever you set `ELASTIC_PASSWORD` to in `.env`) |
-| **Auth method** | HTTP Basic Auth |
-
-Use in curl: `curl -s -u elastic:packetsentry http://localhost:9200/...`
-
-Kibana login uses the same credentials: `elastic` / `packetsentry`.
-
-### Index Overview
-
-| Index Pattern | Contents | Example Document |
-|--------------|----------|-----------------|
-| `packetsentry-alerts-*` | Analysis cycles, threats, Claude verdicts | Each cycle: packet count, alerts, threat level, Claude analysis, thinking blocks, tool calls, MITRE mapping |
-| `packetsentry-packets-*` | Raw packet captures | Each packet: src/dst IP, ports, protocol, frame length, info |
-| `packetsentry-activity-*` | Full agent activity log | Every thinking block, command execution, command output, error, cycle start/end |
-
-### Querying via REST API
-
-Use curl or any HTTP client against `http://localhost:9200` (auth: `elastic` / `packetsentry`):
-
-```bash
-# Count all alerts
-curl -s -u elastic:packetsentry http://localhost:9200/packetsentry-alerts-*/_count | jq .
-
-# Search for high-severity threats
-curl -s -u elastic:packetsentry -X POST http://localhost:9200/packetsentry-alerts-*/_search \
-  -H "Content-Type: application/json" \
-  -d '{"query":{"term":{"threat_level":"high"}},"size":5}' | jq '.hits.hits[]._source | {time: ."@timestamp", threat: .threat_level, analysis: .claude_analysis[0:200]}'
-
-# View recent agent activity
-curl -s -u elastic:packetsentry -X POST http://localhost:9200/packetsentry-activity-*/_search \
-  -H "Content-Type: application/json" \
-  -d '{"query":{"match_all":{}},"size":10,"sort":[{"@timestamp":"desc"}]}' | jq '.hits.hits[]._source.event_type'
-```
 
 ## Understanding the Traffic You'll See
 
@@ -296,7 +236,7 @@ The `traffic-engine` container generates real attacks using nmap, hping3, and ra
 ### 2. Host Traffic (your computer)
 Because the agent uses `network_mode: host` with `tshark -i any`, it captures **everything on your computer's network interfaces** — your browser traffic, system updates, background noise, etc. This is intentional — a real SOC analyst sees all host traffic too.
 
-The agent's AI distinguishes between the two, focusing its analysis on suspicious patterns while still logging everything to Elasticsearch.
+The agent's AI distinguishes between the two, focusing its analysis on suspicious patterns while still logging everything.
 
 ## Troubleshooting
 
@@ -322,13 +262,13 @@ The agent's AI distinguishes between the two, focusing its analysis on suspiciou
 → The target must be a private/internal URL (localhost, 192.168.x.x, 10.x.x.x, etc.). Public sites like google.com, amazon.com are blocked. Make sure your URL includes the scheme (http:// or https://).
 
 **Reset everything**
-→ `docker compose down -v && docker compose --profile attack down -v && docker system prune -a`
+→ `docker compose down -v && docker compose --profile attack down -v`
 
 ## Project Structure
 
 ```
 packetsentry/
-├── docker-compose.yml           # 6-service orchestrator
+├── docker-compose.yml           # 4-service orchestrator (agent, engine, dashboard)
 ├── .env.example                 # API key template
 ├── .gitignore
 ├── README.md
@@ -345,10 +285,11 @@ packetsentry/
 ├── dashboard/
 │   ├── Dockerfile               # Flask + gunicorn
 │   ├── requirements.txt
-│   ├── app.py                   # SSE endpoints + ES queries + URL validation + setup API
+│   ├── app.py                   # SSE endpoints + URL validation + setup API + report generation
+│   ├── report_generator.py      # Professional PDF report builder (fpdf2 + Claude)
 │   └── templates/
-│       └── dashboard.html       # Dark-themed SOC-style UI with setup screen + 4 tabs
-└── elasticsearch/
-    └── init.sh                  # Auto-creates 3 index templates + 3 data views
+│       └── dashboard.html       # Dark-themed SOC-style UI with setup screen + 5 tabs
+└── docs/
+    ├── architecture.svg         # Detailed architecture diagram
+    └── technical-documentation.md  # Full system documentation
 ```
-

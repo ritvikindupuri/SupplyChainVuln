@@ -96,7 +96,7 @@
 
   <!-- Traffic Engine polls Dashboard for target -->
   <path d="M 620 160 L 780 160 L 780 575 L 830 575" fill="none" stroke="#ff9100" stroke-width="1.5" stroke-dasharray="4,4" marker-end="url(#arrow-orange)" opacity="0.6"/>
-  <text x="700" y="152" text-anchor="middle" fill="#8a6a3a" font-size="9">⑨ Poll /api/target (every 8s)</text>
+  <text x="700" y="152" text-anchor="middle" fill="#8a6a3a" font-size="9">⑦ Poll /api/target (every 8s)</text>
 
   <!-- Layer 2: AI Agent -->
   <text x="20" y="270" fill="#00d4ff" font-size="10" font-weight="700">LAYER 2: AI ANALYSIS</text>
@@ -145,7 +145,7 @@
   <text x="650" y="418" fill="#00e676" font-size="10">✓</text>
   <text x="666" y="418" fill="#9aaaba" font-size="10">Autonomous stop (analysis_complete)</text>
   <text x="650" y="438" fill="#00e676" font-size="10">✓</text>
-  <text x="666" y="438" fill="#9aaaba" font-size="10">Real-time ES + Dashboard push</text>
+  <text x="666" y="438" fill="#9aaaba" font-size="10">Real-time Dashboard push via SSE</text>
 
   <!-- Arrow from custom target to agent (tshark captures traffic to/from target) -->
   <path d="M 180 220 L 180 260 L 235 260 L 235 290" fill="none" stroke="#00e676" stroke-width="1.5" marker-end="url(#arrow-green)" opacity="0.6"/>
@@ -155,24 +155,9 @@
   <text x="20" y="500" fill="#ff9100" font-size="10" font-weight="700">LAYER 3: STORAGE &amp; VISUALIZATION</text>
   <line x1="20" y1="505" x2="1080" y2="505" stroke="#ff9100" stroke-opacity="0.3" stroke-width="1"/>
 
-  <!-- Elasticsearch Box -->
-  <rect x="60" y="520" width="230" height="110" rx="10" fill="url(#box-infra)" stroke="#1e3a5f" stroke-width="1.5" filter="url(#shadow)"/>
-  <rect x="60" y="520" width="230" height="28" rx="10" fill="#1e3a5f"/>
-  <rect x="60" y="538" width="230" height="10" fill="#1e3a5f"/>
-  <text x="175" y="540" text-anchor="middle" fill="#5ab0ff" font-size="11" font-weight="600">Elasticsearch</text>
-  <text x="175" y="563" text-anchor="middle" fill="#9aaaba" font-size="10">Index: packetsentry-alerts-*</text>
-  <text x="175" y="580" text-anchor="middle" fill="#9aaaba" font-size="10">Index: packetsentry-packets-*</text>
-  <text x="175" y="600" text-anchor="middle" fill="#5a6a7a" font-size="9">packetsentry-es:9200</text>
-  <text x="175" y="617" text-anchor="middle" fill="#5a6a7a" font-size="9">elastic / packetsentry</text>
 
-  <!-- Kibana Box -->
-  <rect x="320" y="520" width="200" height="110" rx="10" fill="url(#box-infra)" stroke="#1e3a5f" stroke-width="1.5" filter="url(#shadow)"/>
-  <rect x="320" y="520" width="200" height="28" rx="10" fill="#1e3a5f"/>
-  <rect x="320" y="538" width="200" height="10" fill="#1e3a5f"/>
-  <text x="420" y="540" text-anchor="middle" fill="#5ab0ff" font-size="11" font-weight="600">Kibana</text>
-  <text x="420" y="563" text-anchor="middle" fill="#9aaaba" font-size="10">Data visualization</text>
-  <text x="420" y="580" text-anchor="middle" fill="#9aaaba" font-size="10">Alert dashboards</text>
-  <text x="420" y="600" text-anchor="middle" fill="#5a6a7a" font-size="9">packetsentry-kibana:5601</text>
+
+
 
   <!-- Dashboard Box -->
   <rect x="550" y="520" width="280" height="110" rx="10" fill="url(#box-dash)" stroke="#1a4a7f" stroke-width="2" filter="url(#shadow)"/>
@@ -191,33 +176,28 @@
   <rect x="860" y="520" width="200" height="28" rx="10" fill="#3a1a5f"/>
   <rect x="860" y="538" width="200" height="10" fill="#3a1a5f"/>
   <text x="960" y="540" text-anchor="middle" fill="#b388ff" font-size="11" font-weight="600">Report Generator</text>
-  <text x="960" y="563" text-anchor="middle" fill="#ce9ada" font-size="10">Queries ES → Calls Claude</text>
+  <text x="960" y="563" text-anchor="middle" fill="#ce9ada" font-size="10">Queries dashboard → Calls Claude</text>
   <text x="960" y="580" text-anchor="middle" fill="#9a6aba" font-size="10">→ Produces PDF</text>
   <text x="960" y="600" text-anchor="middle" fill="#7a5a9a" font-size="9">Claude-generated content</text>
   <text x="960" y="617" text-anchor="middle" fill="#7a5a9a" font-size="9">Professional FAANG-style layout</text>
 
-  <!-- Agent to ES Arrow -->
-  <path d="M 355 450 L 355 490 L 175 490 L 175 520" fill="none" stroke="#448aff" stroke-width="1.5" marker-end="url(#arrow-blue)" opacity="0.7"/>
-  <text x="265" y="502" text-anchor="middle" fill="#5a7a9a" font-size="9">③ Push alerts + packets + activity</text>
+
 
   <!-- Agent to Dashboard Arrow -->
   <path d="M 475 450 L 475 490 L 690 490 L 690 520" fill="none" stroke="#00d4ff" stroke-width="1.5" marker-end="url(#arrow-blue)" opacity="0.7"/>
-  <text x="580" y="502" text-anchor="middle" fill="#5a7a9a" font-size="9">④ SSE events + analysis</text>
+  <text x="580" y="502" text-anchor="middle" fill="#5a7a9a" font-size="9">③ Push alerts + packets + activity (SSE)</text>
 
-  <!-- ES to Kibana Arrow -->
-  <path d="M 290 575 L 320 575" fill="none" stroke="#448aff" stroke-width="1.5" marker-end="url(#arrow-blue)" opacity="0.5"/>
 
-  <!-- Dashboard to Kibana proxy arrow -->
-  <path d="M 550 595 L 520 595" fill="none" stroke="#00d4ff" stroke-width="1.5" stroke-dasharray="4,4" marker-end="url(#arrow-blue)" opacity="0.6"/>
-  <text x="535" y="587" text-anchor="middle" fill="#5a7a9a" font-size="8">⑧ Proxy /kibana/</text>
+
+
 
   <!-- Dashboard to Report Generator arrow -->
   <path d="M 830 570 L 860 570" fill="none" stroke="#b388ff" stroke-width="1.5" marker-end="url(#arrow-purple)" opacity="0.7"/>
-  <text x="845" y="562" text-anchor="middle" fill="#8a6aba" font-size="8">⑦ Generate</text>
+  <text x="845" y="562" text-anchor="middle" fill="#8a6aba" font-size="8">⑥ Generate</text>
 
   <!-- Dashboard to Agent query arrow -->
   <path d="M 690 520 L 690 490 L 590 490 L 590 450" fill="none" stroke="#ff9100" stroke-width="1.5" stroke-dasharray="4,4" marker-end="url(#arrow-orange)" opacity="0.6"/>
-  <text x="718" y="502" text-anchor="middle" fill="#8a6a3a" font-size="9">⑤ User queries (Ask Agent chat)</text>
+  <text x="718" y="502" text-anchor="middle" fill="#8a6a3a" font-size="9">④ User queries (Ask Agent chat)</text>
 
   <!-- User / Client on left -->
   <rect x="60" y="700" width="160" height="60" rx="30" fill="none" stroke="#3a5a7a" stroke-width="1.5" stroke-dasharray="4,4"/>
@@ -226,7 +206,7 @@
 
   <line x1="140" y1="700" x2="140" y2="660" stroke="#448aff" stroke-width="1.5" marker-end="url(#arrow-blue)" opacity="0.5"/>
   <line x1="690" y1="660" x2="690" y2="700" fill="none" stroke="#00d4ff" stroke-width="1.5" marker-end="url(#arrow-blue)" opacity="0.5"/>
-  <text x="415" y="688" text-anchor="middle" fill="#4a5a6a" font-size="9">⑥ Access dashboard at http://localhost:5000</text>
+  <text x="415" y="688" text-anchor="middle" fill="#4a5a6a" font-size="9">⑤ Access dashboard at http://localhost:5000</text>
 
   <!-- Multi-session annotation -->
   <path d="M 690 630 L 690 650 L 960 650 L 960 630" fill="none" stroke="#ffab00" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#arrow-orange)" opacity="0.4"/>

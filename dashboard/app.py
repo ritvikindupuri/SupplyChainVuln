@@ -10,16 +10,12 @@ import requests
 from datetime import datetime
 from urllib.parse import urlparse
 from flask import Flask, render_template, Response, request, jsonify, stream_with_context, send_file
-from werkzeug.datastructures import Headers
 from dotenv import load_dotenv
 
 load_dotenv()
 
 app = Flask(__name__)
 
-ES_URL = os.getenv("ES_URL", "http://elasticsearch:9200")
-ES_USER = os.getenv("ELASTIC_USER", "elastic")
-ES_PASS = os.getenv("ELASTIC_PASSWORD", "packetsentry")
 AGENT_URL = os.getenv("AGENT_URL", "http://172.30.0.1:8000")
 ANTHROPIC_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 
@@ -98,7 +94,7 @@ def validate_target_url(url):
     return True, generate_allow_reason(url, hostname, False), ""
 
 from report_generator import ReportGenerator, REPORTS_DIR
-report_gen = ReportGenerator(ES_URL, ES_USER, ES_PASS, ANTHROPIC_KEY)
+report_gen = ReportGenerator(ANTHROPIC_KEY)
 
 def _report_status_path(report_id):
     return os.path.join(REPORTS_DIR, f"{report_id}.status.json")
@@ -214,7 +210,6 @@ def receive_event():
 
     elif event_type == "agent_command_output":
         if command_history:
-            cmd = command_history[0]
             for c in command_history:
                 if c.get("tool_id") == event_data.get("tool_id") or c.get("command") == event_data.get("command"):
                     c["output"] = event_data.get("output", "")
@@ -253,15 +248,10 @@ def add_activity(atype, data, ts):
 
 @app.route("/api/events/stream")
 def event_stream():
-    recent_events = []
-
     def generate():
         while True:
             try:
                 event = event_queue.get(timeout=25)
-                recent_events.append(event)
-                if len(recent_events) > 50:
-                    recent_events.pop(0)
                 yield f"data: {json.dumps(event)}\n\n"
             except queue.Empty:
                 yield f"data: {json.dumps({'type': 'heartbeat', 'timestamp': datetime.utcnow().isoformat()})}\n\n"
@@ -311,13 +301,51 @@ def get_activity():
     limit = int(request.args.get("limit", 50))
     return jsonify(activity_feed[:limit])
 
+@app.route("/api/packets/recent")
+def recent_packets():
+    limit = min(int(request.args.get("limit", 100)), 500)
+    return jsonify(packet_buffer[:limit])
+
+@app.route("/api/search/packets")
+def search_packets():
+    ip = request.args.get("ip", "").lower()
+    protocol = request.args.get("protocol", "").lower()
+    port = request.args.get("port", "")
+    results = packet_buffer
+    if ip:
+        results = [p for p in results if ip in p.get("ip_src", "").lower() or ip in p.get("ip_dst", "").lower()]
+    if protocol:
+        results = [p for p in results if p.get("protocol", "").lower() == protocol]
+    if port:
+        results = [p for p in results if p.get("src_port", "") == port or p.get("dst_port", "") == port]
+    return jsonify(results[:50])
+
+@app.route("/api/stats")
+def get_stats():
+    severity_counts = {"low": 0, "medium": 0, "high": 0, "critical": 0}
+    for a in alerts:
+        sev = a.get("severity", "low")
+        if sev in severity_counts:
+            severity_counts[sev] += 1
+
+    return jsonify({
+        "total_alerts": len(alerts),
+        "total_packets": len(packet_buffer),
+        "total_activities": len(activity_feed),
+        "session_alerts": len(alerts),
+        "severity_breakdown": severity_counts,
+        "agent_status": agent_status.get("status", "unknown"),
+        "agent_message": agent_status.get("message", ""),
+        "thinking_blocks": len(thinking_buffer),
+        "commands_executed": len(command_history),
+        "target_url": CUSTOM_TARGET,
+    })
+
 @app.route("/api/ask", methods=["POST"])
 def ask_agent():
     question = request.json.get("question", "")
     if not question:
         return jsonify({"error": "No question provided"}), 400
-
-    push_to_agent("agent_query", {"question": question, "timestamp": datetime.utcnow().isoformat()})
 
     try:
         r = requests.post(
@@ -335,94 +363,6 @@ def ask_agent():
     except Exception as e:
         return jsonify({"answer": f"Query error: {str(e)[:100]}"})
 
-def push_to_agent(event_type, data):
-    try:
-        requests.post(f"{AGENT_URL}/api/events", json={"type": event_type, "data": data}, timeout=2)
-    except:
-        pass
-
-@app.route("/api/packets/recent")
-def recent_packets():
-    limit = int(request.args.get("limit", 100))
-    query = {"query": {"match_all": {}}, "size": limit, "sort": [{"@timestamp": "desc"}]}
-    try:
-        r = requests.get(f"{ES_URL}/packetsentry-packets-*/_search", json=query, auth=(ES_USER, ES_PASS), timeout=5)
-        hits = r.json().get("hits", {}).get("hits", [])
-        packets = []
-        for h in hits:
-            src = h.get("_source", {})
-            src["_id"] = h.get("_id")
-            packets.append(src)
-        return jsonify(packets)
-    except:
-        return jsonify([])
-
-@app.route("/api/search/packets")
-def search_packets():
-    ip = request.args.get("ip", "")
-    protocol = request.args.get("protocol", "")
-    port = request.args.get("port", "")
-    must = []
-    if ip:
-        must.append({"multi_match": {"query": ip, "fields": ["ip_src", "ip_dst"]}})
-    if protocol:
-        must.append({"term": {"protocol": protocol.lower()}})
-    if port:
-        must.append({"multi_match": {"query": port, "fields": ["src_port", "dst_port"]}})
-    query = {"query": {"bool": {"must": must if must else [{"match_all": {}}]}},
-             "size": 50, "sort": [{"@timestamp": "desc"}]}
-    try:
-        r = requests.get(f"{ES_URL}/packetsentry-packets-*/_search", json=query, auth=(ES_USER, ES_PASS), timeout=5)
-        hits = r.json().get("hits", {}).get("hits", [])
-        packets = []
-        for h in hits:
-            src = h.get("_source", {})
-            src["_id"] = h.get("_id")
-            packets.append(src)
-        return jsonify(packets)
-    except:
-        return jsonify([])
-
-@app.route("/api/stats")
-def get_stats():
-    alert_total = 0
-    packet_total = 0
-    activity_total = 0
-    try:
-        r = requests.get(f"{ES_URL}/packetsentry-alerts-*/_count", auth=(ES_USER, ES_PASS), timeout=5)
-        alert_total = r.json().get("count", 0)
-    except:
-        pass
-    try:
-        r = requests.get(f"{ES_URL}/packetsentry-packets-*/_count", auth=(ES_USER, ES_PASS), timeout=5)
-        packet_total = r.json().get("count", 0)
-    except:
-        pass
-    try:
-        r = requests.get(f"{ES_URL}/packetsentry-activity-*/_count", auth=(ES_USER, ES_PASS), timeout=5)
-        activity_total = r.json().get("count", 0)
-    except:
-        pass
-
-    severity_counts = {"low": 0, "medium": 0, "high": 0, "critical": 0}
-    for a in alerts:
-        sev = a.get("severity", "low")
-        if sev in severity_counts:
-            severity_counts[sev] += 1
-
-    return jsonify({
-        "total_alerts": alert_total,
-        "total_packets": packet_total,
-        "total_activities": activity_total,
-        "session_alerts": len(alerts),
-        "severity_breakdown": severity_counts,
-        "agent_status": agent_status.get("status", "unknown"),
-        "agent_message": agent_status.get("message", ""),
-        "thinking_blocks": len(thinking_buffer),
-        "commands_executed": len(command_history),
-        "target_url": CUSTOM_TARGET,
-    })
-
 @app.route("/api/report/generate", methods=["POST"])
 def generate_report():
     report_id = uuid.uuid4().hex[:12]
@@ -433,7 +373,13 @@ def generate_report():
             _write_report_status(report_id, {"status": "generating", "progress": 10})
             time.sleep(1)
             _write_report_status(report_id, {"status": "generating", "progress": 30})
-            path = report_gen.generate(report_id, target_url=CUSTOM_TARGET)
+            path = report_gen.generate(
+                report_id,
+                target_url=CUSTOM_TARGET,
+                alerts=alerts,
+                packets=packet_buffer,
+                activity=activity_feed
+            )
             if path and os.path.exists(path):
                 _write_report_status(report_id, {"status": "complete", "progress": 100, "path": path})
             else:
@@ -462,44 +408,6 @@ def download_report(report_id):
     if not path or not os.path.exists(path):
         return jsonify({"error": "File not found"}), 404
     return send_file(path, as_attachment=True, download_name=f"packetsentry-report-{report_id}.pdf", mimetype="application/pdf")
-
-@app.route("/kibana/", defaults={"path": ""})
-@app.route("/kibana/<path:path>")
-def kibana_proxy(path):
-    prefix = "kibana"
-    target = f"http://kibana:5601/{prefix}/{path}" if path else f"http://kibana:5601/{prefix}/"
-    qs = request.query_string.decode() if request.query_string else ""
-    if qs:
-        target += "?" + qs
-    headers = {k: v for k, v in request.headers if k.lower() not in ("host", "content-length")}
-    headers["X-Forwarded-Host"] = request.host
-    headers["X-Forwarded-Port"] = str(request.environ.get("SERVER_PORT", 5000))
-    headers["X-Forwarded-Proto"] = request.scheme
-    headers["X-Forwarded-Prefix"] = "/kibana"
-    try:
-        resp = requests.request(
-            method=request.method,
-            url=target,
-            headers=headers,
-            data=request.get_data(),
-            cookies=request.cookies,
-            timeout=60,
-            allow_redirects=True,
-        )
-        excluded = {"content-encoding", "content-length", "transfer-encoding", "connection", "content-security-policy"}
-        proxy_headers = Headers()
-        for k, v in resp.raw.headers.items():
-            if k.lower() not in excluded:
-                proxy_headers.add(k, v)
-        app.logger.debug("Kibana proxy: %s -> %s (%d)", request.path, target, resp.status_code)
-        return Response(
-            resp.content,
-            status=resp.status_code,
-            headers=proxy_headers,
-        )
-    except Exception as e:
-        app.logger.error("Kibana proxy error: %s", e)
-        return f"Kibana proxy error: {e}", 502
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)

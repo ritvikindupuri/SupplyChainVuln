@@ -15,9 +15,6 @@ load_dotenv("/agent/.env")
 load_dotenv("/agent/.env.example")
 
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-ES_URL = os.getenv("ES_URL", "http://127.0.0.1:9200")
-ES_USER = os.getenv("ELASTIC_USER", "elastic")
-ES_PASS = os.getenv("ELASTIC_PASSWORD", "packetsentry")
 DASHBOARD_URL = os.getenv("DASHBOARD_URL", "http://127.0.0.1:5000")
 MAX_CYCLES = int(os.getenv("MAX_CYCLES", "8"))
 NO_ALERT_STOP = int(os.getenv("NO_ALERT_STOP", "3"))
@@ -51,16 +48,7 @@ def push_to_dashboard(event_type, data):
     except:
         pass
 
-def push_to_elasticsearch(index, doc):
-    try:
-        doc["@timestamp"] = doc.get("@timestamp", datetime.utcnow().isoformat())
-        doc["session"] = SESSION_ID
-        url = f"{ES_URL}/{index}/_doc"
-        requests.post(url, json=doc, auth=(ES_USER, ES_PASS), timeout=2)
-    except:
-        pass
-
-def log_activity(event_type, data, index="packetsentry-activity-000001"):
+def log_activity(event_type, data):
     entry = {
         "@timestamp": datetime.utcnow().isoformat(),
         "event_type": event_type,
@@ -68,7 +56,6 @@ def log_activity(event_type, data, index="packetsentry-activity-000001"):
         "data": data
     }
     activity_log.append(entry)
-    push_to_elasticsearch(index, entry)
 
 def execute_tshark(args):
     cmd = ["tshark"] + args
@@ -645,40 +632,6 @@ def agent_loop():
                         "cycle": cycle_count,
                         "claude_verdict": analysis.get("analysis", "")[:200]
                     })
-                    for a in alerts[:5]:
-                        push_to_elasticsearch("packetsentry-alerts-000001", {
-                            "@timestamp": datetime.utcnow().isoformat(),
-                            "event_type": a.get("event_type"),
-                            "severity": a.get("severity"),
-                            "protocol": a.get("protocol"),
-                            "src_ip": a.get("src_ip"),
-                            "src_port": a.get("src_port"),
-                            "dst_ip": a.get("dst_ip"),
-                            "dst_port": a.get("dst_port"),
-                            "packet_count": a.get("packet_count"),
-                            "threat_level": a.get("threat_level"),
-                            "attack_name": a.get("attack_name"),
-                            "mitre_tactic": a.get("mitre_tactic"),
-                            "mitre_technique": a.get("mitre_technique"),
-                            "confidence": a.get("confidence"),
-                            "description": a.get("description"),
-                            "claude_analysis": analysis.get("analysis", "")[:500],
-                            "cycle": cycle_count
-                        })
-
-                if packets:
-                    for p in packets[-5:]:
-                        push_to_elasticsearch("packetsentry-packets-000001", {
-                            "frame_len": p.get("frame_len"),
-                            "ip_src": p.get("ip_src"),
-                            "ip_dst": p.get("ip_dst"),
-                            "ip_proto": p.get("ip_proto"),
-                            "src_port": p.get("src_port"),
-                            "dst_port": p.get("dst_port"),
-                            "protocol": p.get("protocol"),
-                            "info": p.get("info"),
-                            "cycle": cycle_count
-                        })
 
                 if not alerts:
                     no_alert_streak += 1

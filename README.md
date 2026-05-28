@@ -55,6 +55,19 @@ flowchart TD
 - Minimum **4GB RAM**, **10GB free disk**
 - A **custom web application** you own or are authorized to test (can be on localhost, LAN, or a private server)
 
+## Tech Stack
+
+| Category | Technology |
+|----------|-----------|
+| **AI Engine** | Claude (claude-sonnet-4-6) via Anthropic API — streaming responses with tool-use |
+| **Packet Capture** | tshark (Wireshark CLI) — `-i any` with host networking, runs as root |
+| **Traffic Generation** | nmap, hping3, raw Python sockets (SYN flood, Slowloris, DNS amplification, etc.) |
+| **Backend** | Python 3.11, Flask, Gunicorn — SSE streaming, REST API, in-memory event store |
+| **Frontend** | Vanilla JS (no frameworks) — dark SOC-themed SPA with 5-tab layout |
+| **Report Generation** | fpdf2 (PDF layout) + Claude API (content generation) — professional multi-section reports |
+| **Containerization** | Docker Compose — 3 containers on isolated bridge network (172.30.0.0/24) + host-networking agent |
+| **OS Support** | Windows (Docker Desktop + WSL2), macOS, Linux |
+
 ## Quick Start
 
 ### Phase 1 — Start Infrastructure
@@ -68,7 +81,10 @@ cd PacketSentry
 cp .env.example .env
 # Edit .env and set ANTHROPIC_API_KEY=sk-ant-... (REQUIRED)
 # CLAUDE_MODEL=claude-sonnet-4-6 (optional, defaults shown)
-# MIN_TOOL_CALLS_FOR_COMPLETE=3 (optional, defaults shown)
+# MIN_TOOL_CALLS_FOR_COMPLETE=3 is a guardrail: Claude must run at least this many
+#   tshark commands per cycle before it can declare analysis complete. This prevents
+#   premature "all clear" decisions. 0=disabled, 1-2=quick, 3=recommended, 4-6=deep.
+#   See the "Completion guardrail" section below for the full table.
 
 # Start infrastructure (Dashboard, Traffic Engine)
 docker compose up -d
@@ -268,7 +284,7 @@ The agent's AI distinguishes between the two, focusing its analysis on suspiciou
 
 ```
 packetsentry/
-├── docker-compose.yml           # 4-service orchestrator (agent, engine, dashboard)
+├── docker-compose.yml           # 3-service orchestrator (agent, engine, dashboard)
 ├── .env.example                 # API key template
 ├── .gitignore
 ├── README.md

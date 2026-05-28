@@ -116,7 +116,18 @@ docker compose logs -f claude-agent
 
 The agent runs adaptively — Claude decides when it's thoroughly analyzed the target. Simple sites finish fast, complex apps get more cycles. Safety limits prevent infinite loops. See [docs/technical-documentation.md](docs/technical-documentation.md#314a-autonomous-session-lifecycle) for details.
 
-**Completion guardrail (`MIN_TOOL_CALLS_FOR_COMPLETE`)**: To prevent premature “all clear” decisions, the agent requires Claude to execute a minimum number of investigative tool checks (tshark commands/statistics/captures) before it is allowed to set `analysis_complete: true`. Default is **3** (configurable via env).
+**Completion guardrail (`MIN_TOOL_CALLS_FOR_COMPLETE`)**: To prevent premature "all clear" decisions, the agent requires Claude to execute a minimum number of investigative tool checks (tshark commands, packet captures, statistics queries) before it is allowed to declare `analysis_complete: true`. Set it in your `.env` file as `MIN_TOOL_CALLS_FOR_COMPLETE=N` where `N` is:
+
+| Value | Behavior | Recommended for |
+|-------|----------|-----------------|
+| `0` | Disabled — Claude can stop anytime, even without running any tools | Not recommended |
+| `1` | At least 1 tool command per cycle | Quick sanity checks |
+| `2` | At least 2 tool commands per cycle | General use (minimum recommended) |
+| `3` | At least 3 tool commands per cycle | **Default — recommended for most users** |
+| `4-6` | 4-6 tool commands per cycle | Thorough, methodical investigation |
+| `7+` | 7+ tool commands per cycle | Very deep analysis (may slow down cycles) |
+
+Default is **3** if unset. Higher values force more thorough investigation per cycle but increase analysis time and API cost.
 
 ## Using the Dashboard
 
@@ -340,3 +351,4 @@ packetsentry/
 └── elasticsearch/
     └── init.sh                  # Auto-creates 3 index templates + 3 data views
 ```
+

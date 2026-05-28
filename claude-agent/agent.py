@@ -477,8 +477,8 @@ TASK:
                 push_to_dashboard("agent_think", {"text": combined_text, "cycle_id": cycle_id, "final": False})
 
             if response.stop_reason == "tool_use" and tool_calls:
-                # Keep the full assistant response content for proper tool_use_id correlation.
-                messages.append({"role": "assistant", "content": response.content})
+                # Serialize ContentBlock pydantic objects to plain dicts to avoid SDK re-serialization bugs.
+                messages.append({"role": "assistant", "content": [block.model_dump(mode="json", exclude_none=True) for block in response.content]})
 
                 tool_results = []
                 for call in tool_calls:
@@ -530,7 +530,7 @@ TASK:
                 if tool_calls_executed < MIN_TOOL_CALLS_FOR_COMPLETE or not has_rationale:
                     # Ask Claude to keep working (do more verification) rather than allowing a premature stop.
                     needed = max(0, MIN_TOOL_CALLS_FOR_COMPLETE - tool_calls_executed)
-                    messages.append({"role": "assistant", "content": response.content})
+                    messages.append({"role": "assistant", "content": [block.model_dump(mode="json", exclude_none=True) for block in response.content]})
                     messages.append({
                         "role": "user",
                         "content": "".join([

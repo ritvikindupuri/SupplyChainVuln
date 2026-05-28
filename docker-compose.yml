@@ -104,6 +104,7 @@ services:
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-6}
+      - MIN_TOOL_CALLS_FOR_COMPLETE=${MIN_TOOL_CALLS_FOR_COMPLETE:-3}
       - ES_URL=http://127.0.0.1:9200
       - ELASTIC_USER=elastic
       - ELASTIC_PASSWORD=${ELASTIC_PASSWORD:-packetsentry}

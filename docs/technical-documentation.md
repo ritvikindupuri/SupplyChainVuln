@@ -350,6 +350,40 @@ The agent does not run indefinitely — it stops autonomously once session objec
 | 2 (safety) | `MAX_CYCLES` (default: 8) | Hard cap — prevents infinite loops even if Claude keeps requesting more cycles |
 | 3 (convergence) | `NO_ALERT_STOP` (default: 3) | Consecutive cycles with zero heuristic alerts — target appears clean |
 
+##### Completion Guardrails (Human-Like Stopping)
+
+For a real security tool, “no alerts” is not sufficient evidence to declare a target fully investigated. PacketSentry therefore enforces additional guardrails around Claude’s completion decision so it behaves like a human penetration tester / network security engineer:
+
+**1) Active verification requirement (`MIN_TOOL_CALLS_FOR_COMPLETE`)**
+
+Claude is given tool-use access (`run_tshark`, `capture_packets`, `get_statistics`) and is expected to actively validate hypotheses using those tools. The agent tracks how many tool calls were executed during a given analysis cycle. Claude is only permitted to finalize a cycle with `analysis_complete: true` if it has executed at least:
+
+- `MIN_TOOL_CALLS_FOR_COMPLETE` tool calls (default: **3**, configurable via environment variable)
+
+If Claude attempts to set `analysis_complete: true` before meeting this threshold, the agent rejects the completion, instructs Claude to continue investigating, and requires additional tool-based checks before a final completion is accepted.
+
+**Why this matters**
+
+- Prevents premature “all clear” based on silence, missing traffic, or weak heuristics
+- Encourages multi-angle verification (broad stats, targeted capture, deep inspection), which mirrors human workflow
+
+**2) Completion rationale requirement**
+
+When Claude sets `analysis_complete: true`, it must include a clearly labeled **“Completion rationale”** section inside the `analysis` field. This rationale is required to contain:
+
+- A list of investigative checks performed (including the tool commands executed and what each result demonstrated)
+- Why remaining hypotheses are low value / not testable with network-only visibility
+- What new evidence would cause Claude to resume analysis (e.g., new suspicious flows, new ports, different traffic patterns)
+
+If this rationale is missing, the agent requires Claude to continue and return a corrected final JSON response.
+
+**3) Safety and convergence limits remain in place**
+
+Even with Claude-driven completion, the agent retains:
+
+- `MAX_CYCLES` as a hard safety cap (prevents runaway loops/cost)
+- `NO_ALERT_STOP` as a convergence heuristic (useful when traffic patterns stabilize and remain clean)
+
 The first criterion to be satisfied stops the current session. This makes the agent **naturally adaptive**:
 - A **simple static site** with no attack surface → Claude may set `analysis_complete: true` after 1-2 cycles
 - A **complex web app** with multiple endpoints and services → Claude keeps going, exploring more attack vectors

@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import time
 import uuid
 import threading
@@ -33,6 +34,10 @@ analysis_active = False
 console_buffer = deque(maxlen=500)
 activity_log = deque(maxlen=1000)
 CUSTOM_TARGET = None
+
+# Guardrail: require real investigative steps before Claude can claim completion.
+# This makes "analysis_complete" behave like a human pentester: verify with evidence, don't just infer from silence.
+MIN_TOOL_CALLS_FOR_COMPLETE = int(os.getenv("MIN_TOOL_CALLS_FOR_COMPLETE", "2"))
 
 def push_to_dashboard(event_type, data):
     try:
@@ -189,21 +194,200 @@ YOUR ANALYSIS CYCLE:
 5. Determine if there is malicious activity and what kind
 6. Provide threat level, MITRE mapping, and remediation steps
 
-RESPONSE FORMAT:
-At the end of your analysis, provide a JSON block with:
-```json
-{{
+RESPONSE FORMAT (CRITICAL):
+At the end of your analysis, return ONLY a valid JSON object (no markdown, no code fences, no extra text) with exactly these fields:
+{
   "analysis": "detailed analysis text",
   "threat_level": "low|medium|high|critical",
   "attack_name": "name of attack or null",
-  "mitre_mapping": {{"tactic": "TAxxxx - Name", "technique": "Txxxx - Name"}},
+  "mitre_mapping": {"tactic": "TAxxxx - Name", "technique": "Txxxx - Name"},
   "recommendations": ["rec1", "rec2", ...],
   "confidence": 0.0-1.0,
   "analysis_complete": true or false
-}}
-```
+}
 
-analysis_complete: Set to true ONLY if you have thoroughly analyzed the target and found no remaining attack surface to investigate. Set to false if you need more cycles to probe further, test additional endpoints, or wait for more attack traffic. Be honest — if there's more to discover, set this to false."""
+analysis_complete:
+Set to true ONLY if you have thoroughly analyzed the target and found no remaining attack surface to investigate.
+Set to false if you need more cycles to probe further, test additional endpoints, or wait for more attack traffic."""
+
+    + f"""
+
+COMPLETION STANDARD (HUMAN-LIKE, STRICT):
+- You are acting like a penetration tester / network security engineer.
+- You may ONLY set analysis_complete=true if you have performed ACTIVE verification, not just observed "no alerts".
+- Before setting analysis_complete=true, you MUST have executed multiple investigative checks using the available tools
+  (run_tshark / capture_packets / get_statistics) to validate that:
+  - traffic to/from the target is understood (protocols, ports, directionality)
+  - no clear scanning/flooding/exfil patterns exist for the target
+  - you have no remaining high-value hypotheses to test with the available tools
+- If you cannot complete active verification (e.g., insufficient traffic), set analysis_complete=false and say exactly what evidence is missing and what you are waiting for.
+
+WHEN analysis_complete=true, the "analysis" field MUST include a clearly labeled section:
+"Completion rationale:" followed by bullet points of:
+- checks performed (tool commands executed + what they proved)
+- why remaining hypotheses are low value / out of scope for network-only visibility
+- what new evidence would make you resume analysis
+"""
+
+def extract_json_analysis(text):
+    """
+    Claude outputs a JSON object (required). This helper makes parsing resilient to minor formatting issues.
+    """
+    defaults = {
+        "analysis": "",
+        "threat_level": "low",
+        "attack_name": None,
+        "mitre_mapping": {"tactic": "", "technique": ""},
+        "recommendations": [],
+        "confidence": 0.0,
+        "analysis_complete": False,
+    }
+    if not text:
+        return defaults
+
+    candidate = None
+    # Prefer a fenced JSON block if Claude includes one (we still asked for no fences, but be tolerant).
+    m = re.search(r"```(?:json)?\s*({.*?})\s*```", text, flags=re.DOTALL)
+    if m:
+        candidate = m.group(1)
+    else:
+        # Fallback: take the first {...} occurrence.
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            candidate = text[start:end + 1]
+
+    if not candidate:
+        defaults["analysis"] = text.strip()[:5000]
+        return defaults
+
+    try:
+        data = json.loads(candidate)
+    except Exception:
+        defaults["analysis"] = text.strip()[:5000]
+        return defaults
+
+    # Normalize expected fields/types.
+    normalized = defaults.copy()
+    if isinstance(data, dict):
+        normalized["analysis"] = str(data.get("analysis", normalized["analysis"]))
+        normalized["threat_level"] = str(data.get("threat_level", normalized["threat_level"]))
+        normalized["attack_name"] = data.get("attack_name", normalized["attack_name"])
+        mm = data.get("mitre_mapping", {}) or {}
+        normalized["mitre_mapping"] = {
+            "tactic": str(mm.get("tactic", "")) if isinstance(mm, dict) else "",
+            "technique": str(mm.get("technique", "")) if isinstance(mm, dict) else "",
+        }
+        recs = data.get("recommendations", []) or []
+        normalized["recommendations"] = recs if isinstance(recs, list) else [str(recs)]
+        try:
+            normalized["confidence"] = float(data.get("confidence", normalized["confidence"]))
+        except Exception:
+            pass
+        normalized["analysis_complete"] = bool(data.get("analysis_complete", False))
+    return normalized
+
+
+def generate_fallback_analysis(packets, alerts):
+    """
+    Used when Claude is unavailable. Must still return analysis_complete so the agent can stop.
+    """
+    severity_order = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+    worst_sev = "low"
+    for a in alerts:
+        sev = (a.get("severity") or "low").lower()
+        if sev in severity_order and severity_order[sev] > severity_order.get(worst_sev, 0):
+            worst_sev = sev
+
+    top_attack = alerts[0].get("attack_name") if alerts else None
+    mm = {"tactic": "", "technique": ""}
+    if alerts:
+        mm["tactic"] = alerts[0].get("mitre_tactic") or ""
+        mm["technique"] = alerts[0].get("mitre_technique") or ""
+
+    confidence = 0.0
+    if alerts:
+        confs = []
+        for a in alerts[:10]:
+            try:
+                confs.append(float(a.get("confidence", 0.5)))
+            except Exception:
+                pass
+        confidence = sum(confs) / len(confs) if confs else 0.5
+    else:
+        confidence = 0.3
+
+    analysis = (
+        f"Heuristic fallback analysis only (Claude disabled/unavailable).\n"
+        f"- Packets analyzed (window): {len(packets)}\n"
+        f"- Heuristic alerts: {len(alerts)}\n"
+        f"- Worst severity observed: {worst_sev.upper()}\n\n"
+        "Because this is offline/heuristic mode, the system cannot guarantee full attack-surface enumeration. "
+        "However, if no alerts are present, we can conservatively treat the current window as having no detected malicious activity."
+    )
+
+    # In fallback mode, completion is based on whether the detector sees anything.
+    analysis_complete = (len(alerts) == 0)
+
+    recommendations = []
+    if alerts:
+        recommendations.append("Review the top alert evidence and implement targeted mitigations for the observed behavior.")
+        recommendations.append("Harden exposed services, validate input handling, and add detection rules for the relevant MITRE mappings.")
+    else:
+        recommendations.append("Maintain baseline monitoring and consider expanding probes if new traffic patterns appear.")
+
+    return {
+        "analysis": analysis,
+        "threat_level": worst_sev,
+        "attack_name": top_attack,
+        "mitre_mapping": mm,
+        "recommendations": recommendations,
+        "confidence": confidence,
+        "analysis_complete": analysis_complete,
+    }
+
+def ask_claude_question(question):
+    """
+    Used by the dashboard "Ask Agent" feature. This is separate from the analysis/cycle lifecycle.
+    """
+    if not ANTHROPIC_API_KEY or not ANTHROPIC_API_KEY.startswith("sk-ant-"):
+        return "Claude API key not configured — cannot answer queries."
+
+    try:
+        import anthropic
+
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        recent_packets = capture.get_recent_packets(10)
+
+        pkt_lines = []
+        for p in recent_packets[-10:]:
+            proto = p.get("protocol") or p.get("ip_proto") or "unknown"
+            src = p.get("ip_src") or ""
+            dst = p.get("ip_dst") or ""
+            info = p.get("info") or ""
+            ln = p.get("frame_len") or ""
+            pkt_lines.append(f"- {proto} {src} -> {dst} len={ln} info={info}".strip())
+
+        pkt_context = "\n".join(pkt_lines) if pkt_lines else "- (no packet context available)"
+
+        system = (
+            "You are PacketSentry, a senior network security engineer. "
+            "Answer the user's question using the provided packet context. "
+            "Be concrete and practical: call out likely causes, what to verify next, and any relevant security controls."
+        )
+        user = f"Target: {CUSTOM_TARGET or 'not set'}\n\nUser question: {question}\n\nRecent packet samples:\n{pkt_context}\n\nAnswer:"
+
+        resp = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=900,
+            system=system,
+            messages=[{"role": "user", "content": user}],
+        )
+
+        text_parts = [b.text for b in resp.content if getattr(b, "type", None) == "text" and getattr(b, "text", None)]
+        return ("".join(text_parts) or "").strip() or "No response generated."
+    except Exception as e:
+        return f"Query error: {e}"
 
 def analyze_with_claude_streaming(packets, alerts):
     global analysis_active
@@ -251,47 +435,154 @@ TASK:
     push_to_dashboard("agent_cycle_start", {"cycle_id": cycle_id, "packet_count": len(packets), "alert_count": len(alerts)})
     log_activity("cycle_start", {"cycle_id": cycle_id, "packet_count": len(packets), "alert_count": len(alerts)})
 
-    thinking_blocks = []
-    tool_calls_made = []
-
     if not ANTHROPIC_API_KEY or not ANTHROPIC_API_KEY.startswith("sk-ant-"):
         fallback = generate_fallback_analysis(packets, alerts)
-        push_to_dashboard("agent_think", {"text": "[Claude API key not configured — running in offline detection mode]", "cycle_id": cycle_id, "final": True})
-        push_to_dashboard("agent_cycle_complete", {"cycle_id": cycle_id, "analysis": fallback, "thinking": ["Offline mode"], "commands": []})
+        push_to_dashboard(
+            "agent_think",
+            {"text": "[Claude API key not configured — running in fallback mode]", "cycle_id": cycle_id, "final": True}
+        )
+        push_to_dashboard(
+            "agent_cycle_complete",
+            {"cycle_id": cycle_id, "analysis": fallback, "thinking": ["Fallback mode"], "commands": []}
+        )
         analysis_active = False
         return fallback
 
     try:
         import anthropic
+
         client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        system = build_system_prompt()
+
+        # Messages history (we append assistant tool requests + user tool results).
         messages = [{"role": "user", "content": prompt}]
 
         max_tool_rounds = 5
-        tool_round = 0
+        last_text = ""
+        tool_calls_executed = 0
 
-        while tool_round < max_tool_rounds:
-            tool_round += 1
-            accumulated_text = ""
-            current_tool_block = None
+        # Tool-use loop: Claude keeps asking for tools until it produces a final JSON object.
+        for _round in range(max_tool_rounds + 1):
+            push_to_dashboard(
+                "agent_status",
+                {"status": "thinking", "message": f"Claude analysis round {_round + 1}", "cycle_id": cycle_id}
+            )
 
-            push_to_dashboard("agent_status", {"status": "thinking", "message": f"Analysis round {tool_round}", "cycle_id": cycle_id})
-
-            with client.messages.stream(
+            response = client.messages.create(
                 model=CLAUDE_MODEL,
+                max_tokens=2048,
+                system=system,
+                messages=messages,
+                tools=TOOLS
+            )
 
-            model=CLAUDE_MODEL,
-            max_tokens=2048,
-            system=f"You are PacketSentry, an AI network security analyst. Target: {CUSTOM_TARGET or 'not set'}. Answer the user's question about current network traffic based on live packet captures.",
-            messages=[{"role": "user", "content": f"Recent packets:\n{pkt_text}\n\nAlerts:\n{alert_text}\n\nQuestion: {question}"}]
-        ) as stream:
-            for event in stream:
-                if event.type == "content_block_delta" and event.delta.type == "text_delta":
-                    accumulated += event.delta.text
-                    push_to_dashboard("agent_think", {"text": event.delta.text, "cycle_id": "query", "query": True})
-        push_to_dashboard("agent_think", {"text": "", "cycle_id": "query", "final": True, "query": True, "block_text": accumulated})
-        return accumulated
+            text_parts = []
+            tool_calls = []
+            for block in response.content:
+                if getattr(block, "type", None) == "text" and getattr(block, "text", None):
+                    text_parts.append(block.text)
+                elif getattr(block, "type", None) == "tool_use":
+                    tool_calls.append(block)
+
+            combined_text = "".join(text_parts).strip()
+            if combined_text:
+                last_text = combined_text
+                push_to_dashboard("agent_think", {"text": combined_text, "cycle_id": cycle_id, "final": False})
+
+            if response.stop_reason == "tool_use" and tool_calls:
+                # Keep the full assistant response content for proper tool_use_id correlation.
+                messages.append({"role": "assistant", "content": response.content})
+
+                tool_results = []
+                for call in tool_calls:
+                    tool_id = getattr(call, "id", None)
+                    tool_name = getattr(call, "name", None)
+                    tool_input = getattr(call, "input", None) or {}
+
+                    push_to_dashboard(
+                        "agent_command",
+                        {
+                            "cycle_id": cycle_id,
+                            "tool_id": tool_id,
+                            "command": tool_name,
+                            "args": tool_input,
+                            "executing": True,
+                        },
+                    )
+
+                    try:
+                        handler = TOOL_MAP.get(tool_name)
+                        if not handler:
+                            result = f"[ERROR] Unknown tool: {tool_name}"
+                        else:
+                            result = handler(tool_input)
+                    except Exception as e:
+                        result = f"[ERROR] Tool execution failed: {e}"
+
+                    result_str = str(result)
+                    tool_calls_executed += 1
+                    push_to_dashboard(
+                        "agent_command_output",
+                        {"cycle_id": cycle_id, "tool_id": tool_id, "command": tool_name, "output": result_str}
+                    )
+
+                    tool_results.append(
+                        {"type": "tool_result", "tool_use_id": tool_id, "content": result_str}
+                    )
+
+                # Tool results must be the next user message; results come first in the content array.
+                messages.append({"role": "user", "content": tool_results})
+                continue
+
+            # Either the model is done, or it stopped for a reason we didn't expect.
+            analysis = extract_json_analysis(combined_text or last_text)
+
+            # Enforce "human-like stop": require active verification + explicit completion rationale.
+            if analysis.get("analysis_complete") is True:
+                has_rationale = "completion rationale" in (analysis.get("analysis") or "").lower()
+                if tool_calls_executed < MIN_TOOL_CALLS_FOR_COMPLETE or not has_rationale:
+                    # Ask Claude to keep working (do more verification) rather than allowing a premature stop.
+                    needed = max(0, MIN_TOOL_CALLS_FOR_COMPLETE - tool_calls_executed)
+                    messages.append({"role": "assistant", "content": response.content})
+                    messages.append({
+                        "role": "user",
+                        "content": "".join([
+                            "You set analysis_complete=true, but the completion standard was not met.\n",
+                            f"- Tool calls executed this cycle: {tool_calls_executed} (minimum required: {MIN_TOOL_CALLS_FOR_COMPLETE})\n",
+                            f"- Missing completion rationale section: {not has_rationale}\n\n",
+                            "Continue investigating like a human pentester:\n",
+                            (f"- Execute at least {needed} more investigative tool checks, and interpret the output.\n" if needed > 0 else ""),
+                            "- Then return ONLY the final JSON again. If evidence is still insufficient, set analysis_complete=false and state what evidence is missing.\n",
+                        ])
+                    })
+                    continue
+
+            push_to_dashboard("agent_think", {"text": "", "cycle_id": cycle_id, "final": True})
+            push_to_dashboard(
+                "agent_cycle_complete",
+                {"cycle_id": cycle_id, "analysis": analysis, "thinking": ["Claude finished turn"], "commands": []},
+            )
+            analysis_active = False
+            return analysis
+
+        # If tool loop limit hit, still attempt to parse last text; otherwise fallback.
+        analysis = extract_json_analysis(last_text) if last_text else generate_fallback_analysis(packets, alerts)
+        push_to_dashboard("agent_think", {"text": "", "cycle_id": cycle_id, "final": True})
+        push_to_dashboard(
+            "agent_cycle_complete",
+            {"cycle_id": cycle_id, "analysis": analysis, "thinking": ["Tool loop limit reached"], "commands": []},
+        )
+        analysis_active = False
+        return analysis
     except Exception as e:
-        return f"Error: {e}"
+        fallback = generate_fallback_analysis(packets, alerts)
+        push_to_dashboard(
+            "agent_think",
+            {"text": f"[Claude error — fallback mode: {str(e)[:120]}]", "cycle_id": cycle_id, "final": True},
+        )
+        push_to_dashboard("agent_cycle_complete", {"cycle_id": cycle_id, "analysis": fallback, "thinking": ["Claude error fallback"], "commands": []})
+        analysis_active = False
+        return fallback
 
 def agent_loop():
     global analysis_active, CUSTOM_TARGET
@@ -389,31 +680,31 @@ def agent_loop():
                             "cycle": cycle_count
                         })
 
-            if not alerts:
-                no_alert_streak += 1
-            else:
-                no_alert_streak = 0
+                if not alerts:
+                    no_alert_streak += 1
+                else:
+                    no_alert_streak = 0
 
-            analysis_complete = analysis.get("analysis_complete", False)
+                analysis_complete = analysis.get("analysis_complete", False)
 
-            if analysis_complete:
-                stop_reason = f"Claude determined analysis is complete — all attack surfaces investigated"
-            elif cycle_count >= MAX_CYCLES:
-                stop_reason = f"Reached maximum of {MAX_CYCLES} analysis cycles"
-            elif no_alert_streak >= NO_ALERT_STOP:
-                stop_reason = f"No threats detected for {NO_ALERT_STOP} consecutive cycles"
+                if analysis_complete:
+                    stop_reason = f"Claude determined analysis is complete — all attack surfaces investigated"
+                elif cycle_count >= MAX_CYCLES:
+                    stop_reason = f"Reached maximum of {MAX_CYCLES} analysis cycles"
+                elif no_alert_streak >= NO_ALERT_STOP:
+                    stop_reason = f"No threats detected for {NO_ALERT_STOP} consecutive cycles"
 
-            if stop_reason:
-                push_to_dashboard("session_complete", {
-                    "total_cycles": cycle_count,
-                    "message": f"{stop_reason}. Final threat level: {threat}.",
-                    "final_threat": threat,
-                    "stop_reason": stop_reason
-                })
-                push_to_dashboard("agent_status", {"status": "complete", "message": f"Session complete — {cycle_count} cycles, final threat: {threat}. {stop_reason}"})
-                print(f"[+] Session complete after {cycle_count} cycles: {stop_reason}")
-                break
-
+                if stop_reason:
+                    push_to_dashboard("session_complete", {
+                        "total_cycles": cycle_count,
+                        "message": f"{stop_reason}. Final threat level: {threat}.",
+                        "final_threat": threat,
+                        "stop_reason": stop_reason
+                    })
+                    push_to_dashboard("agent_status", {"status": "complete", "message": f"Session complete — {cycle_count} cycles, final threat: {threat}. {stop_reason}"})
+                    print(f"[+] Session complete after {cycle_count} cycles: {stop_reason}")
+                    print("[+] === STOP POINT: PacketSentry agent session finished ===")
+                    break
             except Exception as e:
                 print(f"[!] Agent error: {e}")
                 push_to_dashboard("agent_status", {"status": "error", "message": f"Error: {str(e)[:100]}"})

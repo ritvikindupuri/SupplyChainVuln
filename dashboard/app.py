@@ -10,6 +10,7 @@ import requests
 from datetime import datetime
 from urllib.parse import urlparse
 from flask import Flask, render_template, Response, request, jsonify, stream_with_context, send_file
+from werkzeug.datastructures import Headers
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -471,6 +472,10 @@ def kibana_proxy(path):
     if qs:
         target += "?" + qs
     headers = {k: v for k, v in request.headers if k.lower() not in ("host", "content-length")}
+    headers["X-Forwarded-Host"] = request.host
+    headers["X-Forwarded-Port"] = str(request.environ.get("SERVER_PORT", 5000))
+    headers["X-Forwarded-Proto"] = request.scheme
+    headers["X-Forwarded-Prefix"] = "/kibana"
     try:
         resp = requests.request(
             method=request.method,
@@ -478,18 +483,22 @@ def kibana_proxy(path):
             headers=headers,
             data=request.get_data(),
             cookies=request.cookies,
-            stream=True,
-            timeout=30,
-            allow_redirects=False,
+            timeout=60,
+            allow_redirects=True,
         )
         excluded = {"content-encoding", "content-length", "transfer-encoding", "connection"}
-        proxy_headers = {k: v for k, v in resp.headers.items() if k.lower() not in excluded}
+        proxy_headers = Headers()
+        for k, v in resp.raw.headers.items():
+            if k.lower() not in excluded:
+                proxy_headers.add(k, v)
+        app.logger.debug("Kibana proxy: %s -> %s (%d)", request.path, target, resp.status_code)
         return Response(
-            resp.iter_content(chunk_size=8192),
+            resp.content,
             status=resp.status_code,
             headers=proxy_headers,
         )
     except Exception as e:
+        app.logger.error("Kibana proxy error: %s", e)
         return f"Kibana proxy error: {e}", 502
 
 if __name__ == "__main__":

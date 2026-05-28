@@ -101,7 +101,7 @@ curl -s -u "$ES_USER:$ES_PASS" -X PUT "$ES_URL/_index_template/packetsentry_acti
   }' | jq .
 
 echo "[+] Waiting for Kibana..."
-until curl -s "$KB_URL/api/status" > /dev/null 2>&1; do
+until curl -s "$KB_URL/kibana/api/status" > /dev/null 2>&1; do
   sleep 3
 done
 echo "[+] Kibana is ready."
@@ -111,7 +111,7 @@ for pair in "packetsentry-alerts-*:PacketSentry Alerts" "packetsentry-packets-*:
   pattern="${pair%%:*}"
   name="${pair##*:}"
   echo "[+] Creating data view: $name ($pattern)"
-  response=$(curl -s -u "$ES_USER:$ES_PASS" -X POST "$KB_URL/api/data_views/data_view" \
+  response=$(curl -s -u "$ES_USER:$ES_PASS" -X POST "$KB_URL/kibana/api/data_views/data_view" \
     -H "kbn-xsrf: true" \
     -H "Content-Type: application/json" \
     -d "{\"data_view\":{\"title\":\"$pattern\",\"name\":\"$name\",\"timeFieldName\":\"@timestamp\"}}")

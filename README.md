@@ -116,6 +116,8 @@ docker compose logs -f claude-agent
 
 The agent runs adaptively — Claude decides when it's thoroughly analyzed the target. Simple sites finish fast, complex apps get more cycles. Safety limits prevent infinite loops. See [docs/technical-documentation.md](docs/technical-documentation.md#314a-autonomous-session-lifecycle) for details.
 
+**Completion guardrail (`MIN_TOOL_CALLS_FOR_COMPLETE`)**: To prevent premature “all clear” decisions, the agent requires Claude to execute a minimum number of investigative tool checks (tshark commands/statistics/captures) before it is allowed to set `analysis_complete: true`. Default is **3** (configurable via env).
+
 ## Using the Dashboard
 
 Open **http://localhost:5000** — you'll first see the **setup screen** to enter your target URL. After setup, the dashboard has 5 tabs:

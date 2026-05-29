@@ -946,6 +946,7 @@ function _flushPacketBatch() {
 // ============================
 // PACKET / ALERT POLLING
 // ============================
+async function refreshPackets() {
     try {
         const resp = await fetch('/api/packets/recent?limit=60');
         if (!resp.ok) return;

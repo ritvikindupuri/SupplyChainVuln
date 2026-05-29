@@ -183,15 +183,15 @@ YOUR ANALYSIS CYCLE:
 
 RESPONSE FORMAT (CRITICAL):
 At the end of your analysis, return ONLY a valid JSON object (no markdown, no code fences, no extra text) with exactly these fields:
-{
+{{
   "analysis": "detailed analysis text",
   "threat_level": "low|medium|high|critical",
   "attack_name": "name of attack or null",
-  "mitre_mapping": {"tactic": "TAxxxx - Name", "technique": "Txxxx - Name"},
+  "mitre_mapping": {{"tactic": "TAxxxx - Name", "technique": "Txxxx - Name"}},
   "recommendations": ["rec1", "rec2", ...],
   "confidence": 0.0-1.0,
   "analysis_complete": true or false
-}
+}}
 
 analysis_complete:
 Set to true ONLY if you have thoroughly analyzed the target and found no remaining attack surface to investigate.

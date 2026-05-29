@@ -1192,7 +1192,6 @@ function clearAllState() {
 function startMainUI() {
     clearAllState();
     if (eventSource) eventSource.close();
-    fetch('/api/reset', {method: 'POST'}).catch(() => {});
     setTimeout(connectSSE, 2000);
     if (window._refreshInterval) clearInterval(window._refreshInterval);
     setInterval(refreshStats, 5000);

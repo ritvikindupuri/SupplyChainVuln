@@ -31,6 +31,8 @@ SEVERITY_COLORS = {
 
 class FPDF2(FPDF):
     def _sanitize(self, text):
+        import re
+        # Replace typographic chars with ASCII equivalents first
         repl = {
             '\u2014': '--', '\u2013': '-', '\u2018': "'", '\u2019': "'",
             '\u201c': '"', '\u201d': '"', '\u2022': '*', '\u2026': '...',
@@ -39,6 +41,8 @@ class FPDF2(FPDF):
         out = str(text)
         for k, v in repl.items():
             out = out.replace(k, v)
+        # Strip emoji and other characters outside Latin-1 (Helvetica range)
+        out = re.sub(r'[^\x00-\xff]', '', out)
         return out
 
     def header(self):

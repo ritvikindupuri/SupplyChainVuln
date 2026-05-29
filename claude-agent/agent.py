@@ -612,6 +612,11 @@ def agent_loop():
         cycle_count = 0
         no_alert_streak = 0
         stop_reason = None
+        top_threat = "low"
+        total_alerts_found = 0
+        total_packets_analyzed = 0
+        attacks_detected = []
+        claude_findings = []
         print(f"[+] New session {session_id} starting — target: {CUSTOM_TARGET}")
 
         while True:
@@ -642,11 +647,20 @@ def agent_loop():
 
                 threat = analysis.get("threat_level", "low")
                 attack = analysis.get("attack_name", "")
+                severity_map_c = {"low": 0, "medium": 1, "high": 2, "critical": 3}
+                if severity_map_c.get(threat, 0) > severity_map_c.get(top_threat, 0):
+                    top_threat = threat
+                total_alerts_found += len(alerts)
+                total_packets_analyzed += len(packets)
+                if attack:
+                    attacks_detected.append(attack)
+                analysis_snippet = (analysis.get("analysis", "") or "")[:150].strip()
+                if analysis_snippet:
+                    claude_findings.append(f"Cycle {cycle_count}: {analysis_snippet}")
                 print(f"[Cycle {cycle_count}] Complete — threat: {threat}{f', attack: {attack}' if attack else ''}")
 
                 if alerts:
-                    severity_map = {"low": 0, "medium": 1, "high": 2, "critical": 3}
-                    worst = max(alerts, key=lambda a: severity_map.get(a.get("severity", "low"), 0))
+                    worst = max(alerts, key=lambda a: severity_map_c.get(a.get("severity", "low"), 0))
                     push_to_dashboard("alert", {
                         "severity": worst["severity"],
                         "event_type": worst["event_type"],
@@ -664,11 +678,13 @@ def agent_loop():
                 analysis_complete = analysis.get("analysis_complete", False)
 
                 if analysis_complete:
-                    stop_reason = f"Claude determined analysis is complete — all attack surfaces investigated"
+                    attack_summary = f", found: {', '.join(attacks_detected[-3:])}" if attacks_detected else ""
+                    stop_reason = f"AI analysis complete — Claude investigated the target{attack_summary}. Final threat: {threat.upper()}, total alerts: {total_alerts_found}, packets analyzed: {total_packets_analyzed}."
                 elif cycle_count >= MAX_CYCLES:
-                    stop_reason = f"Reached maximum of {MAX_CYCLES} analysis cycles"
+                    attack_summary = f" Detected attacks: {', '.join(attacks_detected[-3:])}." if attacks_detected else " No specific attacks identified."
+                    stop_reason = f"Session ended after {MAX_CYCLES} analysis cycles — maximum exploration depth reached. Total packets: {total_packets_analyzed} across {cycle_count} cycles, alerts: {total_alerts_found}, peak threat: {top_threat.upper()}.{attack_summary} Claude had sufficient data to assess the target's security posture."
                 elif no_alert_streak >= NO_ALERT_STOP:
-                    stop_reason = f"No threats detected for {NO_ALERT_STOP} consecutive cycles"
+                    stop_reason = f"Analysis stopped — no threats detected for {NO_ALERT_STOP} consecutive cycles ({total_packets_analyzed} total packets, {total_alerts_found} alerts over {cycle_count} cycles). Target appears clean."
 
                 if stop_reason:
                     push_to_dashboard("session_complete", {

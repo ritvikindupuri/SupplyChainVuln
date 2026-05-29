@@ -253,15 +253,15 @@ Lovable-generated apps work especially well because they contain realistic login
 
 ## Understanding the Traffic You'll See
 
-The agent captures and analyzes **two categories of network traffic** simultaneously:
+The agent captures and analyzes **two categories of network traffic** simultaneously. The dashboard color-codes them so you can distinguish them at a glance:
 
-### 1. Attack Traffic (from traffic-engine)
-The `traffic-engine` container generates real attacks using nmap, hping3, and raw sockets targeting your custom web app. This includes SYN floods, port scans, Slowloris connection holds, and directory brute force attempts.
+### 🔴 Attack Traffic (red — from traffic-engine)
+The `traffic-engine` container generates real attacks using nmap, hping3, and raw sockets targeting your custom web app. This includes SYN floods, port scans, Slowloris connection holds, and directory brute force attempts. Attack traffic originates from the **Docker bridge network** (`172.30.0.0/24`) and appears **red** in the Live Packets tab and sidebar stats.
 
-### 2. Host Traffic (your computer)
-Because the agent uses `network_mode: host` with `tshark -i any`, it captures **everything on your computer's network interfaces** — your browser traffic, system updates, background noise, etc. This is intentional — a real SOC analyst sees all host traffic too.
+### 🔵 Host Traffic (blue — your computer)
+Because the agent uses `network_mode: host` with `tshark -i any`, it captures **everything on your computer's network interfaces** — your browser traffic, system updates, background noise, etc. This is intentional — a real SOC analyst sees all host traffic too. Host traffic appears **blue** in the Live Packets tab and sidebar stats.
 
-The agent's AI distinguishes between the two, focusing its analysis on suspicious patterns while still logging everything.
+The agent's AI distinguishes between the two, focusing its analysis on suspicious patterns while still logging everything. The sidebar in the dashboard shows a live count of each traffic type.
 
 ## Troubleshooting
 

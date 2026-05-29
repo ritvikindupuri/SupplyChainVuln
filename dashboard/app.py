@@ -176,6 +176,7 @@ def receive_event():
     if not data:
         return jsonify({"ok": False, "error": "no data"}), 400
 
+    global packet_buffer
     event_type = data.get("type", "unknown")
     event_data = data.get("data", {})
     ts = data.get("timestamp", datetime.utcnow().isoformat())

@@ -801,10 +801,9 @@ function handleCycleComplete(data, ts) {
 // ============================
 // ALERTS
 // ============================
-function handleAlert(data) {
+function addAlertRow(data) {
     const sev = data.severity || 'low';
     const container = document.getElementById('alertsContainer');
-
     const el = document.createElement('div');
     el.className = `alert-item ${sev}`;
     el.dataset.severity = sev;
@@ -814,27 +813,53 @@ function handleAlert(data) {
         <div class="alert-desc">${escapeHtml(data.description || '')}</div>
         <div class="alert-footer">
             <span class="severity-tag ${sev}">${sev}</span>
-            ${data.claude_verdict ? `<span class="alert-claude">🤖 ${escapeHtml(data.claude_verdict.substring(0, 500))}</span>` : ''}
+            ${data.claude_verdict ? `<span class="alert-claude">${escapeHtml(data.claude_verdict.substring(0, 500))}</span>` : ''}
         </div>
     `;
-    container.prepend(el);
-    while (container.children.length > 100) container.removeChild(container.lastChild);
-
-    // Update badges
+    container.appendChild(el);
+    while (container.children.length > 100) container.removeChild(container.firstChild);
     const count = document.querySelectorAll('.alert-item').length;
     updateStat('statAlerts', count);
     document.getElementById('alertBadge').textContent = count;
-
-    // Apply current filter
     if (currentAlertFilter !== 'all') {
         el.style.display = sev === currentAlertFilter ? '' : 'none';
     }
 }
 
+function handleAlert(data) {
+    addAlertRow(data);
+}
+
 // ============================
-// PACKET TABLE
+// UTILITY FUNCTIONS
 // ============================
 const DOCKER_NETWORK_CIDR = '172.30.0.0/24';
+let attackPktCount = 0;
+let hostPktCount = 0;
+let packetSourceFilter = 'all';
+
+function escapeHtml(s) {
+    if (!s) return '';
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+function updateStat(id, val) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (typeof val === 'function') {
+        const cur = parseInt(el.textContent) || 0;
+        el.textContent = val(cur);
+    } else {
+        el.textContent = val;
+    }
+}
+
+function removeEmptyState(body) {
+    const empty = body.querySelector('.empty-state');
+    if (empty) empty.remove();
+}
 
 function ipToInt(ip) {
     const parts = ip.split('.');
@@ -854,234 +879,91 @@ function classifyPacket(pkt) {
     return inDocker ? 'attack' : 'host';
 }
 
-function classifyLabel(label) {
-    return label === 'attack' ? 'Attack' : 'Host';
-}
-
-let packetSourceFilter = 'all';
-let attackPktCount = 0;
-let hostPktCount = 0;
-
-function updatePacketTable(packets) {
-    const tbody = document.getElementById('packetTableBody');
-    packets.forEach(p => {
-        const cls = classifyPacket(p);
-        let tr = document.createElement('tr');
-        if (packetSourceFilter !== 'all' && cls !== packetSourceFilter) {
-            tr.style.display = 'none';
-        }
-        const ts = p.timestamp ? new Date(parseFloat(p.timestamp)*1000).toLocaleTimeString() : '';
-        const proto = (p.protocol || '').toLowerCase();
-        tr.innerHTML = `
-            <td>${ts}</td>
-            <td>${escapeHtml(p.ip_src || '')}${p.src_port ? ':'+p.src_port : ''}</td>
-            <td>${escapeHtml(p.ip_dst || '')}${p.dst_port ? ':'+p.dst_port : ''}</td>
-            <td class="proto-${proto}">${escapeHtml(p.protocol || '')}</td>
-            <td style="max-width:350px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml((p.info || '').substring(0, 80))}</td>
-            <td>${p.frame_len || ''}</td>
-            <td><span class="src-badge ${cls}">${classifyLabel(cls)}</span></td>
-        `;
-        tbody.prepend(tr);
-        while (tbody.children.length > 200) tbody.removeChild(tbody.lastChild);
-        if (cls === 'attack') attackPktCount++;
-        else hostPktCount++;
-    });
-    document.getElementById('statAttackPktsVal').textContent = attackPktCount;
-    document.getElementById('statHostPktsVal').textContent = hostPktCount;
-}
-
 function setPacketSource(val, btn) {
     packetSourceFilter = val;
     document.querySelectorAll('.packet-source-filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     const tbody = document.getElementById('packetTableBody');
-    Array.from(tbody.children).forEach(tr => {
-        const badge = tr.querySelector('.src-badge');
-        if (!badge) return;
-        if (val === 'all') { tr.style.display = ''; return; }
-        tr.style.display = badge.classList.contains(val) ? '' : 'none';
+    Array.from(tbody.children).forEach(row => {
+        const cls = row.dataset.src || 'host';
+        row.style.display = (val === 'all' || cls === val) ? '' : 'none';
     });
-}
-
-// ============================
-// CHAT
-// ============================
-function stripMarkdown(text) {
-    if (!text) return '';
-    return text.replace(/#{1,6}\s*/g, '').replace(/\*{1,3}/g, '').replace(/`{1,3}/g, '').replace(/_{1,2}/g, '');
-}
-
-async function sendChat() {
-    const input = document.getElementById('chatInput');
-    const question = input.value.trim();
-    if (!question) return;
-
-    const messages = document.getElementById('chatMessages');
-    messages.innerHTML = '';
-    const userMsg = document.createElement('div');
-    userMsg.className = 'chat-message user';
-    userMsg.innerHTML = `<div class="bubble">${escapeHtml(question)}</div>`;
-    messages.appendChild(userMsg);
-    input.value = '';
-    document.querySelector('.chat-input button').disabled = true;
-
-    const agentMsg = document.createElement('div');
-    agentMsg.className = 'chat-message agent';
-    agentMsg.innerHTML = `<div class="bubble"><span class="spinner"></span> Analyzing...</div>`;
-    messages.appendChild(agentMsg);
-    messages.scrollTop = messages.scrollHeight;
-
-    try {
-        const resp = await fetch('/api/ask', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({question})
-        });
-        const data = await resp.json();
-        const clean = stripMarkdown(data.answer || 'No response');
-        agentMsg.innerHTML = `<div class="bubble">${escapeHtml(clean)}</div>`;
-    } catch(err) {
-        agentMsg.innerHTML = `<div class="bubble" style="color:#ff6b6b">Error: ${escapeHtml(err.message)}</div>`;
-    }
-    document.querySelector('.chat-input button').disabled = false;
-    messages.scrollTop = messages.scrollHeight;
-}
-
-// ============================
-// HELPERS
-// ============================
-function removeEmptyState(body) {
-    const empty = body.querySelector('.empty-state');
-    if (empty) empty.remove();
-}
-
-function updateStat(id, updater) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    if (typeof updater === 'function') {
-        const curr = isNaN(parseInt(el.textContent)) ? 0 : parseInt(el.textContent);
-        el.textContent = updater(curr);
-    } else {
-        el.textContent = updater;
-    }
-}
-
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-// ============================
-// REPORT GENERATION
-// ============================
-function generateReport() {
-    const btn = document.getElementById('reportGenBtn');
-    const status = document.getElementById('reportStatus');
-    const progress = document.getElementById('reportProgress');
-    const bar = document.getElementById('reportProgressBar');
-    const ptext = document.getElementById('reportProgressText');
-    const result = document.getElementById('reportResult');
-    const error = document.getElementById('reportError');
-
-    btn.disabled = true;
-    btn.textContent = '\u25B6 Generating...';
-    status.textContent = '';
-    result.style.display = 'none';
-    error.style.display = 'none';
-    progress.style.display = 'flex';
-
-    fetch('/api/report/generate', { method: 'POST' })
-        .then(r => r.json())
-        .then(data => {
-            if (data.report_id) {
-                pollReportStatus(data.report_id);
-            } else {
-                showReportError('Failed to start generation');
-            }
-        })
-        .catch(err => showReportError('Connection error: ' + err.message));
-}
-
-function pollReportStatus(reportId) {
-    const bar = document.getElementById('reportProgressBar');
-    const ptext = document.getElementById('reportProgressText');
-    const status = document.getElementById('reportStatus');
-
-    const poll = setInterval(() => {
-        fetch('/api/report/status/' + reportId)
-            .then(r => r.json())
-            .then(data => {
-                bar.style.width = data.progress + '%';
-                ptext.textContent = data.progress + '%';
-                if (data.status === 'complete') {
-                    clearInterval(poll);
-                    showReportReady(reportId);
-                } else if (data.status === 'error') {
-                    clearInterval(poll);
-                    showReportError(data.error || 'Unknown error');
-                }
-            })
-            .catch(() => {});
-    }, 1500);
-}
-
-function showReportReady(reportId) {
-    const btn = document.getElementById('reportGenBtn');
-    const progress = document.getElementById('reportProgress');
-    const result = document.getElementById('reportResult');
-    const link = document.getElementById('reportDownloadLink');
-    const status = document.getElementById('reportStatus');
-
-    btn.disabled = false;
-    btn.textContent = '\u25B6 Generate New Report';
-    progress.style.display = 'none';
-    status.textContent = '';
-
-    link.href = '/api/report/download/' + reportId;
-    result.style.display = 'block';
-}
-
-function showReportError(msg) {
-    const btn = document.getElementById('reportGenBtn');
-    const progress = document.getElementById('reportProgress');
-    const error = document.getElementById('reportError');
-
-    btn.disabled = false;
-    btn.textContent = '\u25B6 Generate New Report';
-    progress.style.display = 'none';
-    error.textContent = 'Error: ' + msg;
-    error.style.display = 'block';
-}
-
-function clearConsole() {
-    const body = document.getElementById('consoleBody');
-    body.innerHTML = '<div class="empty-state"><div class="icon">🖥</div><p>Console cleared. Waiting for next analysis cycle...</p></div>';
-}
-
-function scrollConsole() {
-    autoScroll = !autoScroll;
-    document.getElementById('autoScrollLabel').textContent = autoScroll ? 'ON' : 'OFF';
 }
 
 function filterAlerts(severity, btn) {
     currentAlertFilter = severity;
     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-    if (btn) btn.classList.add('active');
-
+    btn.classList.add('active');
     document.querySelectorAll('.alert-item').forEach(el => {
-        const sev = el.dataset.severity;
-        el.style.display = (severity === 'all' || sev === severity) ? '' : 'none';
+        el.style.display = (severity === 'all' || el.dataset.severity === severity) ? '' : 'none';
     });
 }
 
-async function refreshPackets() {
+// ============================
+// PACKET TABLE
+// ============================
+let _pendingPackets = [];
+
+function updatePacketTable(packets) {
+    if (!packets || !packets.length) return;
+    _pendingPackets.push(...packets);
+    _flushPacketBatch();
+}
+
+function _flushPacketBatch() {
+    const tbody = document.getElementById('packetTableBody');
+    if (!tbody) return;
+    const toRender = _pendingPackets.splice(0, _pendingPackets.length);
+    const fragment = document.createDocumentFragment();
+    for (const p of toRender) {
+        const cls = classifyPacket(p);
+        if (packetSourceFilter !== 'all' && cls !== packetSourceFilter) continue;
+        if (cls === 'attack') attackPktCount++;
+        else if (cls === 'host') hostPktCount++;
+        const row = document.createElement('tr');
+        row.dataset.src = cls;
+        const time = (p.timestamp || '').length > 12 ? p.timestamp.substring(p.timestamp.indexOf(' ') + 1, p.timestamp.indexOf(' ') + 9) : (p.arrived || '').substring(11, 19);
+        const proto = (p.protocol || '').toLowerCase();
+        const protoClass = proto === 'http' ? 'proto-http' : proto === 'dns' ? 'proto-dns' : proto === 'tcp' ? 'proto-tcp' : proto === 'udp' ? 'proto-udp' : '';
+        row.innerHTML = `
+            <td style="color:#3a5a6a;font-size:10px">${escapeHtml(time)}</td>
+            <td>${escapeHtml(p.ip_src || '')}:${escapeHtml(p.src_port || '')}</td>
+            <td>${escapeHtml(p.ip_dst || '')}:${escapeHtml(p.dst_port || '')}</td>
+            <td class="${protoClass}">${escapeHtml(proto)}</td>
+            <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml(p.info || '')}</td>
+            <td style="color:#3a5a6a">${escapeHtml(p.frame_len || '')}</td>
+            <td><span class="src-badge ${cls}">${cls}</span></td>
+        `;
+        fragment.appendChild(row);
+    }
+    if (fragment.children.length) {
+        tbody.appendChild(fragment);
+        document.getElementById('statAttackPktsVal').textContent = attackPktCount;
+        document.getElementById('statHostPktsVal').textContent = hostPktCount;
+    }
+}
+
+// ============================
+// PACKET / ALERT POLLING
+// ============================
     try {
         const resp = await fetch('/api/packets/recent?limit=60');
         if (!resp.ok) return;
         const packets = await resp.json();
         if (packets.length > 0) updatePacketTable(packets);
+    } catch(err) {}
+}
+
+async function refreshAlerts() {
+    try {
+        const resp = await fetch('/api/alerts?limit=20');
+        if (!resp.ok) return;
+        const alerts = await resp.json();
+        if (alerts.length > 0) {
+            const container = document.getElementById('alertsContainer');
+            container.innerHTML = '';
+            alerts.forEach(a => addAlertRow(a));
+        }
     } catch(err) {}
 }
 
@@ -1093,6 +975,104 @@ async function refreshStats() {
         document.getElementById('statThinking').textContent = data.thinking_blocks || 0;
         document.getElementById('statCommands').textContent = data.commands_executed || 0;
     } catch(err) {}
+}
+
+// ============================
+// ASK AGENT
+// ============================
+function sendChat() {
+    const input = document.getElementById('chatInput');
+    const msg = input.value.trim();
+    if (!msg) return;
+    input.value = '';
+    const container = document.getElementById('chatMessages');
+    removeEmptyState(container);
+    const userDiv = document.createElement('div');
+    userDiv.className = 'chat-message user';
+    userDiv.innerHTML = '<div class="bubble">' + escapeHtml(msg) + '</div>';
+    container.appendChild(userDiv);
+    const agentDiv = document.createElement('div');
+    agentDiv.className = 'chat-message agent';
+    agentDiv.innerHTML = '<div class="bubble" id="chatResponse">Thinking...</div>';
+    container.appendChild(agentDiv);
+    container.scrollTop = container.scrollHeight;
+    fetch('/api/ask', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({question: msg})
+    })
+    .then(r => r.json())
+    .then(data => {
+        const responseEl = document.getElementById('chatResponse');
+        if (responseEl) {
+            const answer = data.answer || data.response || '(no response)';
+            responseEl.innerHTML = escapeHtml(answer);
+        }
+    })
+    .catch(err => {
+        const responseEl = document.getElementById('chatResponse');
+        if (responseEl) responseEl.innerHTML = 'Error: ' + escapeHtml(err.message);
+    });
+}
+
+// ============================
+// REPORT GENERATION
+// ============================
+function generateReport() {
+    const btn = document.getElementById('reportGenBtn');
+    const status = document.getElementById('reportStatus');
+    const progress = document.getElementById('reportProgress');
+    const progressBar = document.getElementById('reportProgressBar');
+    const progressText = document.getElementById('reportProgressText');
+    const result = document.getElementById('reportResult');
+    const error = document.getElementById('reportError');
+    btn.disabled = true;
+    status.textContent = 'Generating report...';
+    progress.style.display = 'block';
+    progressBar.style.width = '10%';
+    progressText.textContent = '10%';
+    result.style.display = 'none';
+    error.style.display = 'none';
+    fetch('/api/report/generate', {method: 'POST'})
+    .then(r => r.json())
+    .then(data => {
+        if (!data.report_id) {
+            throw new Error('No report ID returned');
+        }
+        const reportId = data.report_id;
+        const poll = setInterval(() => {
+            fetch('/api/report/status/' + reportId)
+            .then(r => r.json())
+            .then(s => {
+                const pct = s.progress || 0;
+                progressBar.style.width = pct + '%';
+                progressText.textContent = pct + '%';
+                if (s.status === 'complete') {
+                    clearInterval(poll);
+                    btn.disabled = false;
+                    status.textContent = '';
+                    progress.style.display = 'none';
+                    result.style.display = 'block';
+                    document.getElementById('reportDownloadLink').href = '/api/report/download/' + reportId;
+                } else if (s.status === 'error') {
+                    clearInterval(poll);
+                    btn.disabled = false;
+                    status.textContent = '';
+                    progress.style.display = 'none';
+                    error.style.display = 'block';
+                    error.textContent = s.error || 'Report generation failed';
+                }
+            })
+            .catch(() => {});
+        }, 2000);
+    })
+    .catch(err => {
+        btn.disabled = false;
+        status.textContent = '';
+        progress.style.display = 'none';
+        error.style.display = 'block';
+        error.textContent = 'Error: ' + err.message;
+    });
 }
 
 // ============================
@@ -1196,7 +1176,9 @@ function startMainUI() {
     if (window._refreshInterval) clearInterval(window._refreshInterval);
     setInterval(refreshStats, 5000);
     setInterval(refreshPackets, 8000);
+    setInterval(refreshAlerts, 10000);
     setTimeout(refreshStats, 500);
+    setTimeout(refreshAlerts, 1000);
 }
 
 // ============================

@@ -195,7 +195,10 @@ At the end of your analysis, return ONLY a valid JSON object (no markdown, no co
 
 analysis_complete:
 Set to true ONLY if you have thoroughly analyzed the target and found no remaining attack surface to investigate.
-Set to false if you need more cycles to probe further, test additional endpoints, or wait for more attack traffic."""
+Set to false if you need more cycles to probe further, test additional endpoints, or wait for more attack traffic.
+
+CRITICAL RULE — ALWAYS EXPLAIN BEFORE TOOL USE:
+Before using any tool, you MUST write 1-3 sentences explaining what you are about to do and why. Never run a tool silently. Your reasoning is the only way the user can follow your analysis."""
 
     + f"""
 
@@ -475,11 +478,6 @@ TASK:
             if combined_text:
                 last_text = combined_text
                 push_to_dashboard("agent_think", {"text": combined_text, "cycle_id": cycle_id, "final": False})
-
-            if response.stop_reason == "tool_use" and tool_calls:
-                if not combined_text and tool_calls:
-                    tool_names = [getattr(c, "name", "?") for c in tool_calls]
-                    push_to_dashboard("agent_think", {"text": f"Running: {', '.join(tool_names)}", "cycle_id": cycle_id, "final": False})
                 # Serialize ContentBlock pydantic objects to plain dicts to avoid SDK re-serialization bugs.
                 messages.append({"role": "assistant", "content": [block.model_dump(mode="json", exclude_none=True) for block in response.content]})
 
@@ -617,6 +615,13 @@ def agent_loop():
 
                 print(f"[Cycle {cycle_count}] {len(packets)} packets, {len(alerts)} alerts — analyzing {CUSTOM_TARGET}")
                 push_to_dashboard("agent_status", {"status": "analyzing", "message": f"Cycle {cycle_count}: analyzing {CUSTOM_TARGET} — {len(packets)} packets, {len(alerts)} alerts", "cycle": cycle_count})
+
+                push_to_dashboard("analysis_cycle", {"sample_packets": [{
+                    "ip_src": p.get("ip_src",""), "ip_dst": p.get("ip_dst",""),
+                    "protocol": p.get("protocol",""), "frame_len": p.get("frame_len",""),
+                    "info": p.get("info",""), "src_port": p.get("src_port",""),
+                    "dst_port": p.get("dst_port",""), "timestamp": p.get("timestamp","")
+                } for p in packets[-10:]], "cycle": cycle_count, "packet_count": len(packets), "alert_count": len(alerts)})
 
                 analysis = analyze_with_claude_streaming(packets, alerts)
 

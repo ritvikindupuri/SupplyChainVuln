@@ -11,4 +11,4 @@ COPY report_generator.py ./
 COPY templates/ ./templates/
 COPY static/ ./static/
 
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--threads", "2", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "1", "--threads", "4", "app:app"]

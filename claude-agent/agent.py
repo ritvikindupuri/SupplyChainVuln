@@ -447,15 +447,21 @@ TASK:
         # Messages history (we append assistant tool requests + user tool results).
         messages = [{"role": "user", "content": prompt}]
 
-        max_tool_rounds = 5
+        max_tool_rounds = 8
         last_text = ""
         tool_calls_executed = 0
 
-        # Tool-use loop: Claude keeps asking for tools until it produces a final JSON object.
+        # Show initial "starting up" message so the user sees something immediately
+        push_to_dashboard(
+            "agent_status",
+            {"status": "thinking", "message": "Starting analysis — contacting Claude AI...", "cycle_id": cycle_id}
+        )
+
+        # Tool-use loop: ONE TOOL PER ROUND so Claude's thinking appears between each command.
         for _round in range(max_tool_rounds + 1):
             push_to_dashboard(
                 "agent_status",
-                {"status": "thinking", "message": f"Claude analysis round {_round + 1}", "cycle_id": cycle_id}
+                {"status": "thinking", "message": f"Analysis round {_round + 1}", "cycle_id": cycle_id}
             )
 
             response = client.messages.create(
@@ -478,82 +484,91 @@ TASK:
             if combined_text:
                 last_text = combined_text
                 push_to_dashboard("agent_think", {"text": combined_text, "cycle_id": cycle_id, "final": False})
-                # Serialize ContentBlock pydantic objects to plain dicts to avoid SDK re-serialization bugs.
-                messages.append({"role": "assistant", "content": [block.model_dump(mode="json", exclude_none=True) for block in response.content]})
 
-                tool_results = []
-                for call in tool_calls:
-                    tool_id = getattr(call, "id", None)
-                    tool_name = getattr(call, "name", None)
-                    tool_input = getattr(call, "input", None) or {}
+            # ALWAYS record the assistant response, even if no text.
+            messages.append({"role": "assistant", "content": [block.model_dump(mode="json", exclude_none=True) for block in response.content]})
 
-                    push_to_dashboard(
-                        "agent_command",
-                        {
-                            "cycle_id": cycle_id,
-                            "tool_id": tool_id,
-                            "command": tool_name,
-                            "args": tool_input,
-                            "executing": True,
-                        },
-                    )
+            if not tool_calls:
+                # No more tools — parse final JSON.
+                analysis = extract_json_analysis(combined_text or last_text)
 
-                    try:
-                        handler = TOOL_MAP.get(tool_name)
-                        if not handler:
-                            result = f"[ERROR] Unknown tool: {tool_name}"
-                        else:
-                            result = handler(tool_input)
-                    except Exception as e:
-                        result = f"[ERROR] Tool execution failed: {e}"
+                # Enforce "human-like stop": require active verification + explicit completion rationale.
+                if analysis.get("analysis_complete") is True:
+                    has_rationale = "completion rationale" in (analysis.get("analysis") or "").lower()
+                    if tool_calls_executed < MIN_TOOL_CALLS_FOR_COMPLETE or not has_rationale:
+                        needed = max(0, MIN_TOOL_CALLS_FOR_COMPLETE - tool_calls_executed)
+                        messages.append({
+                            "role": "user",
+                            "content": "".join([
+                                "You set analysis_complete=true, but the completion standard was not met.\n",
+                                f"- Tool calls executed this cycle: {tool_calls_executed} (minimum required: {MIN_TOOL_CALLS_FOR_COMPLETE})\n",
+                                f"- Missing completion rationale section: {not has_rationale}\n\n",
+                                "Continue investigating like a human pentester:\n",
+                                (f"- Execute at least {needed} more investigative tool checks, and interpret the output.\n" if needed > 0 else ""),
+                                "- Then return ONLY the final JSON again. If evidence is still insufficient, set analysis_complete=false and state what evidence is missing.\n",
+                            ])
+                        })
+                        continue
 
-                    result_str = str(result)
-                    tool_calls_executed += 1
-                    push_to_dashboard(
-                        "agent_command_output",
-                        {"cycle_id": cycle_id, "tool_id": tool_id, "command": tool_name, "output": result_str}
-                    )
+                push_to_dashboard("agent_think", {"text": "", "cycle_id": cycle_id, "final": True})
+                push_to_dashboard(
+                    "agent_cycle_complete",
+                    {"cycle_id": cycle_id, "analysis": analysis, "thinking": ["Claude finished turn"], "commands": []},
+                )
+                analysis_active = False
+                return analysis
 
-                    tool_results.append(
-                        {"type": "tool_result", "tool_use_id": tool_id, "content": result_str}
-                    )
+            # Execute only ONE tool per round so Claude thinks between commands.
+            call = tool_calls[0]
+            tool_id = getattr(call, "id", None)
+            tool_name = getattr(call, "name", None)
+            tool_input = getattr(call, "input", None) or {}
 
-                # Tool results must be the next user message; results come first in the content array.
-                messages.append({"role": "user", "content": tool_results})
-                continue
-
-            # Either the model is done, or it stopped for a reason we didn't expect.
-            analysis = extract_json_analysis(combined_text or last_text)
-
-            # Enforce "human-like stop": require active verification + explicit completion rationale.
-            if analysis.get("analysis_complete") is True:
-                has_rationale = "completion rationale" in (analysis.get("analysis") or "").lower()
-                if tool_calls_executed < MIN_TOOL_CALLS_FOR_COMPLETE or not has_rationale:
-                    # Ask Claude to keep working (do more verification) rather than allowing a premature stop.
-                    needed = max(0, MIN_TOOL_CALLS_FOR_COMPLETE - tool_calls_executed)
-                    messages.append({"role": "assistant", "content": [block.model_dump(mode="json", exclude_none=True) for block in response.content]})
-                    messages.append({
-                        "role": "user",
-                        "content": "".join([
-                            "You set analysis_complete=true, but the completion standard was not met.\n",
-                            f"- Tool calls executed this cycle: {tool_calls_executed} (minimum required: {MIN_TOOL_CALLS_FOR_COMPLETE})\n",
-                            f"- Missing completion rationale section: {not has_rationale}\n\n",
-                            "Continue investigating like a human pentester:\n",
-                            (f"- Execute at least {needed} more investigative tool checks, and interpret the output.\n" if needed > 0 else ""),
-                            "- Then return ONLY the final JSON again. If evidence is still insufficient, set analysis_complete=false and state what evidence is missing.\n",
-                        ])
-                    })
-                    continue
-
-            push_to_dashboard("agent_think", {"text": "", "cycle_id": cycle_id, "final": True})
             push_to_dashboard(
-                "agent_cycle_complete",
-                {"cycle_id": cycle_id, "analysis": analysis, "thinking": ["Claude finished turn"], "commands": []},
+                "agent_command",
+                {
+                    "cycle_id": cycle_id,
+                    "tool_id": tool_id,
+                    "command": tool_name,
+                    "args": tool_input,
+                    "executing": True,
+                },
             )
-            analysis_active = False
-            return analysis
 
-        # If tool loop limit hit, still attempt to parse last text; otherwise fallback.
+            try:
+                handler = TOOL_MAP.get(tool_name)
+                if not handler:
+                    result = f"[ERROR] Unknown tool: {tool_name}"
+                else:
+                    result = handler(tool_input)
+            except Exception as e:
+                result = f"[ERROR] Tool execution failed: {e}"
+
+            result_str = str(result)
+            tool_calls_executed += 1
+            push_to_dashboard(
+                "agent_command_output",
+                {"cycle_id": cycle_id, "tool_id": tool_id, "command": tool_name, "output": result_str}
+            )
+
+            # Send tool result back. If Claude had asked for more tools in this response,
+            # tell it to analyze the result first before proceeding.
+            tool_result_block = {"type": "tool_result", "tool_use_id": tool_id, "content": result_str}
+            if len(tool_calls) > 1:
+                remaining = [c.name for c in tool_calls[1:]]
+                messages.append({
+                    "role": "user",
+                    "content": [
+                        tool_result_block,
+                        {"type": "text", "text": f"That tool finished. You also requested: {remaining}. Analyze this result carefully, then proceed with the next tool if still needed."}
+                    ]
+                })
+            else:
+                messages.append({"role": "user", "content": [tool_result_block]})
+
+            # Loop back — Claude will respond with thinking + next tool
+
+        # Tool loop limit hit.
         analysis = extract_json_analysis(last_text) if last_text else generate_fallback_analysis(packets, alerts)
         push_to_dashboard("agent_think", {"text": "", "cycle_id": cycle_id, "final": True})
         push_to_dashboard(

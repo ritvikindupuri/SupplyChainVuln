@@ -477,6 +477,9 @@ TASK:
                 push_to_dashboard("agent_think", {"text": combined_text, "cycle_id": cycle_id, "final": False})
 
             if response.stop_reason == "tool_use" and tool_calls:
+                if not combined_text and tool_calls:
+                    tool_names = [getattr(c, "name", "?") for c in tool_calls]
+                    push_to_dashboard("agent_think", {"text": f"Running: {', '.join(tool_names)}", "cycle_id": cycle_id, "final": False})
                 # Serialize ContentBlock pydantic objects to plain dicts to avoid SDK re-serialization bugs.
                 messages.append({"role": "assistant", "content": [block.model_dump(mode="json", exclude_none=True) for block in response.content]})
 

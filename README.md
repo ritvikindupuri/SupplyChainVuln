@@ -234,6 +234,15 @@ Lovable-generated apps work especially well because they contain realistic login
 |-----------|-----|-------------|
 | **PacketSentry Dashboard** | http://localhost:5000 | None (setup screen first) |
 
+## How to Use
+
+1. Open the **Dashboard** at http://localhost:5000
+2. Enter the **target URL** of a web app you control (e.g. `http://192.168.1.100:8080`, `http://localhost:8080`, or a Netlify/Vercel staging URL)
+3. Click **Start** — the traffic engine begins generating attacks and the AI agent starts analyzing
+4. Watch the **5 tabs** populate with real data: Agent Console (thinking + commands), Alerts (detected attacks), Live Packets (captured traffic), Ask Agent (chat with Claude), Reports (downloadable PDF)
+5. Made a mistake on the URL? Click **New Target** in the Agent Console toolbar to reset and go back to the URL entry screen
+6. The agent **stops autonomously** when it determines analysis is complete — a "Session Complete" banner appears
+
 ## Services
 
 | Service | Container | Ports | Description |

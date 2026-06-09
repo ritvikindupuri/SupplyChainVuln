@@ -61,11 +61,13 @@ The operational flow of the SecureChain application is carefully orchestrated to
    - All findings from the three prescan agents are aggregated into the **Evidence Store (SES)**.
    - The system categorizes these security findings and logs them as preliminary proof/evidence for further review.
 
-6. **AI Consensus & Validation:**
-   - The core service packages the preliminary evidence and forwards it across a highly restrictive, internal bridge network to the **ai-consensus service** (`http://ai-consensus:9100`).
-   - Inside the consensus service, the *Consensus Validation Engine* initializes the secondary review.
-   - **Model Consensus Peer Review:** The primary orchestrator, powered by **Google Gemini**, evaluates the findings and consults the Joint/Peer Validator, powered by **Anthropic Claude**. The models debate and validate the evidence until a consensus verdict on the true severity and nature of the vulnerability is reached.
-   - *Security Note:* The ai-consensus service container is strictly isolated. It contains the highly sensitive API keys required for AI communication and exposes **no ports** to the host.
+6. **AI Consensus & Validation (Consensus Validation Engine):**
+   - The core service packages the preliminary evidence and forwards it across a highly restrictive, internal bridge network to the **ai-consensus service**.
+   - *Token-Efficient Design:* The core server only sends a commit digest to the AI service if the deterministic prescanners found concrete evidence. Clean commits never reach the AI, saving API tokens.
+   - **Model Consensus Peer Review:** A dual-model approach is used to drastically reduce false positives:
+     - **Google Gemini (Primary Orchestrator):** Gemini ingests the commit digest, evaluates the raw evidence, and produces an initial strict JSON verdict deciding if the commit is worth an analyst's attention.
+     - **Anthropic Claude (Peer Validator):** Claude takes Gemini's initial verdict and cross-references it with the raw evidence. It is strictly prompted to remove or downgrade noise (e.g., test fixtures, documentation links, safe placeholder values), validate the truthfulness of IOC matches, and verify that the suggested remediations are safe.
+   - *Security Note:* The ai-consensus service container is strictly isolated. It is the **only** component that holds the Gemini/Claude API keys. It does not use mock data; actual API keys are strictly required or the pipeline throws a `ConsensusError`. It exposes **no ports** to the host.
 
 7. **Review and Reporting:**
    - The finalized verdict JSON details are streamed back to the **Analyst Workspace Portal** within the core service.

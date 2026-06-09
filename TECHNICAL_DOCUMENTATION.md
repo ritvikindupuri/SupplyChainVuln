@@ -53,18 +53,39 @@ The operational flow of the SecureChain application is carefully orchestrated to
 
 4. **Parallel Prescan Execution:**
    - The security team consists of three specialized sub-agents working simultaneously:
-     - **Agent 1 (Package & Name Checker):** Ingests and analyzes package dependencies to identify known vulnerable libraries or malicious typosquatting attempts.
-     - **Agent 2 (Scrambled Code & Secret Leak):** Scans the code deltas for accidentally committed cryptographic keys, passwords, and deliberately obfuscated logic.
-     - **Agent 3 (Hacker Connection Tracer):** Traces and evaluates network endpoints defined in the code to identify hardcoded, suspicious, or unverified outbound connections.
+     - **Agent 1 (Package & Name Checker) [Pillar: Identity]:** Ingests and analyzes package dependencies and configuration files (e.g., `package.json`, `requirements.txt`).
+       - *Features Assessed:*
+         - **Typosquatting Detection:** Calculates Levenshtein distance against registries of popular packages (e.g., React, Lodash, Requests, Django) to flag malicious look-alikes.
+         - **Dependency Confusion / Non-Registry Sources:** Flags packages pulled from non-standard or direct URLs (e.g., `git+`, `http tarballs`) rather than verified registries.
+         - **Suspicious Install Hooks:** Detects dangerous install-time scripts (e.g., `preinstall`, `postinstall`, `prepare` in npm) commonly abused to execute arbitrary code.
+     - **Agent 2 (Scrambled Code & Secret Leak Scanner) [Pillar: Integrity]:** Scans code deltas for intentionally obscured logic or accidentally committed credentials.
+       - *Features Assessed:*
+         - **Exposed Secrets:** Detects AWS Access/Secret Keys, GitHub Personal/OAuth/App Tokens, Slack Tokens, Google API Keys, Stripe Keys, OpenAI/Anthropic Keys, Private Key Blocks, JWT Tokens, and Database Connection URIs.
+         - **Code Obfuscation:** Flags scrambled payloads designed to hide intent, including base64 `eval(atob(...))`, encoded buffers, hex/unicode-escaped string blobs, high-entropy base64 blobs, and `child_process`/`os.system` executions.
+     - **Agent 3 (Hacker Connection Tracer) [Pillar: Network]:** Traces code execution pathways to identify where the application is sending data.
+       - *Features Assessed:*
+         - **Suspicious Outbound Endpoints:** Flags hardcoded references to domains frequently abused for C2 or exfiltration (e.g., `pastebin`, `ngrok`, `discord webhooks`, `telegram API`, `requestbin`).
+         - **Hardcoded External IPs:** Identifies raw, public IP addresses integrated into network calls or socket connections.
+         - **Raw Sockets/WebSockets:** Detects direct, lower-level socket connections that might bypass standard HTTP monitoring.
+         - **Data Exfiltration Combinations:** Flags critical lines of code that simultaneously read sensitive data (e.g., `process.env`, `id_rsa`) and make an outbound network call (`requests.post`, `fetch`).
+     - **IOC Matcher [Pillar: Indicators]:** Operates deterministically to match code against curated Lists of Indicators of Compromise.
+       - *Features Assessed:*
+         - **Malicious Packages:** Cross-references dependencies against documented malicious npm/PyPI supply-chain campaigns (e.g., `crossenv`, `colourama`).
+         - **C2/Exfil Infrastructure:** Flags immediate matches for known anonymous-hosting or command-and-control infrastructure.
+         - **Suspicious TLDs:** Identifies outbound URLs utilizing high-risk top-level domains (e.g., `.tk`, `.xyz`, `.top`).
+         - **Malicious Patterns:** Detects known download-and-execute or reverse-shell command patterns (e.g., `curl-pipe-shell`, `powershell-download`, `nc -e`).
 
 5. **Evidence Collection:**
    - All findings from the three prescan agents are aggregated into the **Evidence Store (SES)**.
    - The system categorizes these security findings and logs them as preliminary proof/evidence for further review.
 
-6. **AI Consensus & Validation:**
+6. **AI Consensus & Validation (Detailed Engine Workflow):**
    - The core service packages the preliminary evidence and forwards it across a highly restrictive, internal bridge network to the **ai-consensus service** (`http://ai-consensus:9100`).
-   - Inside the consensus service, the *Consensus Validation Engine* initializes the secondary review.
-   - **Model Consensus Peer Review:** The primary orchestrator, powered by **Google Gemini**, evaluates the findings and consults the Joint/Peer Validator, powered by **Anthropic Claude**. The models debate and validate the evidence until a consensus verdict on the true severity and nature of the vulnerability is reached.
+   - This architecture is highly token-efficient: the core server only routes a commit to the AI service if the deterministic agents and IOC Matcher previously flagged risk within the diff. Clean commits are bypassed entirely.
+   - Inside the consensus service, the *Consensus Validation Engine* initializes the secondary, per-commit review.
+   - **Dual-Model Consensus Dynamics:**
+     - **Primary Orchestrator (Google Gemini):** Gemini takes the raw evidence and the commit digest. It assesses the findings (including verifying whether IOC matches are genuine indicators or benign occurrences like test fixtures/allowlists) and returns an initial JSON verdict structure defining the overarching commit risk, a summary, and specific remediations.
+     - **Peer Validator (Anthropic Claude):** Claude subsequently acts as a strict secondary reviewer. It takes both the original raw evidence and Gemini's initial verdict as input. Claude validates each finding, actively downgrading or removing false positives (such as placeholder values or documentation links), confirms the true nature of IOCs, and finalizes the JSON verdict. This ensures a high-confidence alert meant directly for a security analyst.
    - *Security Note:* The ai-consensus service container is strictly isolated. It contains the highly sensitive API keys required for AI communication and exposes **no ports** to the host.
 
 7. **Review and Reporting:**

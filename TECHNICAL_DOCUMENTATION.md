@@ -51,8 +51,8 @@ The operational flow of the SecureChain application is carefully orchestrated to
    - The *Core Express Server* acts as a Git Diff Delta Compiler.
    - Upon receiving a new diff, the compiler immediately dispatches parallel analysis tasks to the *Parallel Prescan Security Team*.
 
-4. **Parallel Prescan Execution:**
-   - The security team consists of three specialized sub-agents working simultaneously:
+4. **Parallel Prescan Execution (Deterministic Python Agents):**
+   - The security team consists of three specialized sub-agents working simultaneously. **Important Note:** These three prescan agents are *not* powered by LLMs (neither Gemini nor Claude). They are deterministic Python scripts that utilize regular expressions, entropy analysis, and curated IOC lists to ensure fast, low-cost, and rule-based initial detection.
      - **Agent 1 (Package & Name Checker):** Ingests and analyzes package dependencies to identify known vulnerable libraries or malicious typosquatting attempts.
      - **Agent 2 (Scrambled Code & Secret Leak):** Scans the code deltas for accidentally committed cryptographic keys, passwords, and deliberately obfuscated logic.
      - **Agent 3 (Hacker Connection Tracer):** Traces and evaluates network endpoints defined in the code to identify hardcoded, suspicious, or unverified outbound connections.
@@ -78,7 +78,7 @@ The operational flow of the SecureChain application is carefully orchestrated to
 
 ## Detailed Features & Assessed Risks
 
-SecureChain does not solely rely on AI for initial detection; instead, it uses a deterministic Indicator of Compromise (IOC) matching system. The parallel prescan agents evaluate specific, vetted security risks:
+SecureChain does not solely rely on AI for initial detection; instead, it uses a deterministic Indicator of Compromise (IOC) matching system. The parallel prescan agents evaluate specific, vetted security risks. *(Note again: Agents 1, 2, and 3 are standard Python evidence collectors. Gemini and Claude are strictly reserved for the Consensus Validation Engine).*
 
 ### 1. Package Checker (Agent 1)
 - **Risk Assessed:** Malicious supply-chain campaigns, dependency confusion, and typosquatting.

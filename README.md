@@ -19,10 +19,10 @@ The SecureChain system operates through a structured pipeline:
 
 1. **Fetch commit diff deltas:** The system begins by monitoring target repositories via the **GitHub Core Stream**. When changes occur, it fetches the precise commit diff deltas.
 2. **Dispatch parallel scans:** The **Core Express Server** (Git Diff Delta Compiler) compiles the fetched diffs and dispatches them as parallel scanning jobs to dedicated security agents.
-3. **Ingest dependencies:** The Parallel Prescan Security Team gets to work. **Agent 1 (Package & Name Checker)** specifically ingests and inspects newly introduced package dependencies for malicious intent or typosquatting.
-4. **Scan keys & obfuscation:** Concurrently, **Agent 2 (Scrambled Code & Secret Leak)** scans the raw code looking for inadvertently exposed secrets, hardcoded API keys, or intentionally obfuscated code.
-5. **Trace network endpoints:** At the same time, **Agent 3 (Hacker Connection Tracer)** analyzes the code to trace any suspicious outbound network endpoints or unexpected connections.
-6. **Review proof & evidence:** The combined security findings from the prescan agents are funneled into the **Evidence Store (SES)**, acting as a central repository for all identified proof and evidence.
+3. **Ingest dependencies (Deterministic):** The Parallel Prescan Security Team gets to work. **Agent 1 (Package & Name Checker)** specifically ingests and inspects newly introduced package dependencies for malicious intent or typosquatting. *(Note: Agents 1, 2, and 3 are standard, non-LLM Python scripts).*
+4. **Scan keys & obfuscation (Deterministic):** Concurrently, **Agent 2 (Scrambled Code & Secret Leak)** scans the raw code looking for inadvertently exposed secrets, hardcoded API keys, or intentionally obfuscated code.
+5. **Trace network endpoints (Deterministic):** At the same time, **Agent 3 (Hacker Connection Tracer)** analyzes the code to trace any suspicious outbound network endpoints or unexpected connections.
+6. **Review proof & evidence:** The combined security findings from these three non-AI prescan agents are funneled into the **Evidence Store (SES)**, acting as a central repository for all identified proof and evidence.
 7. **Model consensus peer review:** The collected evidence is forwarded to the **Consensus Validation Engine**, where a dual-LLM approach takes place. **Google Gemini (Primary Orchestrator)** and **Anthropic Claude (Joint / Peer Validator)** perform a consensus-based peer review to reduce false positives and deliver high-confidence vulnerability verdicts.
 8. **Stream verdict JSON details:** Finally, the finalized security verdicts are streamed as structured JSON details to the **Analyst Workspace Portal**, which visually maps out D3.js topologies and alerts for security analysts.
 

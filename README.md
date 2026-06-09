@@ -2,6 +2,8 @@
 
 SecureChain is an automated security analysis tool that proactively scans target GitHub repositories for supply chain vulnerabilities. By continuously analyzing commit diffs, it acts as a robust early-warning system capable of identifying malicious packages, hardcoded secrets, obfuscated code, and suspicious network endpoints before they are deployed.
 
+> 📖 **For a comprehensive look at the system design, container hardening, and agent orchestration, please read our [Technical Documentation](TECHNICAL_DOCUMENTATION.md).**
+
 ## System Architecture
 
 <div align="center">

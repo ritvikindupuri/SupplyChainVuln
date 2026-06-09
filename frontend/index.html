@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SecureChain — Supply-Chain Security</title>
+<link rel="stylesheet" href="style.css">
+<script src="https://d3js.org/d3.v7.min.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <img src="logo.svg" alt="SecureChain" class="logo" width="44" height="44">
+    <div>
+      <h1>SecureChain</h1>
+      <p>Supply-Chain Security Intelligence</p>
+    </div>
+  </div>
+  <div class="health" id="health"></div>
+  <button class="theme-toggle" id="themeToggle" title="Toggle dark mode" aria-label="Toggle dark mode">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </button>
+</header>
+
+<!-- Scan setup -->
+<section class="setup" id="setup">
+  <div class="setup-box">
+    <h2>Scan a GitHub Repository</h2>
+    <p class="hint">Enter a <strong>public</strong> GitHub repository. SecureChain fetches only the recent commit diff deltas and runs three security agents in parallel, then validates with Gemini + Claude.</p>
+    <div class="input-row">
+      <input type="text" id="repoInput" placeholder="https://github.com/owner/repo  (or owner/repo)" autocomplete="off">
+      <select id="commitCount" title="How many recent commits to scan">
+        <option value="auto" selected>Auto (recommended)</option>
+        <option value="3">3 commits</option>
+        <option value="5">5 commits</option>
+        <option value="8">8 commits</option>
+        <option value="10">10 commits</option>
+      </select>
+      <button id="scanBtn" onclick="startScan()">Scan</button>
+    </div>
+    <details class="commit-guide">
+      <summary>How many commits should I scan?</summary>
+      <ul>
+        <li><b>Auto</b> &mdash; SecureChain picks the right number of commits for you, based on how active the repo is (recommended)</li>
+        <li><b>3</b> &mdash; just check the few newest changes</li>
+        <li><b>5</b> &mdash; check a recent pull request or small batch of work</li>
+        <li><b>8</b> &mdash; a normal check for a repo with regular activity</li>
+        <li><b>10</b> &mdash; check further back for slow-moving repos that don't change often</li>
+      </ul>
+    </details>
+    <div class="setup-status" id="setupStatus"></div>
+    <div class="examples">
+      Try: <code onclick="fillExample(this)">expressjs/express</code>
+      <code onclick="fillExample(this)">pallets/flask</code>
+      <code onclick="fillExample(this)">lodash/lodash</code>
+    </div>
+  </div>
+</section>
+
+<!-- Main workspace -->
+<main class="workspace hidden" id="workspace">
+  <div class="ws-header">
+    <div>
+      <h2 id="repoTitle">—</h2>
+      <p id="repoMeta" class="repo-meta"></p>
+    </div>
+    <div class="ws-actions">
+      <span class="risk-chip" id="riskChip">PENDING</span>
+      <button class="ghost" onclick="newScan()">New Scan</button>
+      <button class="primary" id="reportBtn" onclick="downloadReport()" disabled>Download PDF Report</button>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- Pipeline topology -->
+    <section class="panel topology-panel">
+      <div class="panel-head">Pipeline Topology <span class="sub">live</span></div>
+      <svg id="topology" width="100%" height="360"></svg>
+    </section>
+
+    <!-- Stats -->
+    <aside class="panel stats-panel">
+      <div class="panel-head">Severity</div>
+      <div class="sev-grid" id="sevGrid"></div>
+      <div class="ioc-stat" id="iocStat"></div>
+      <div class="panel-head" style="margin-top:18px">Agents</div>
+      <div class="agent-list" id="agentList"></div>
+    </aside>
+
+    <!-- Activity log -->
+    <section class="panel activity-panel">
+      <div class="panel-head">Activity Stream</div>
+      <div class="activity" id="activity"></div>
+    </section>
+
+    <!-- Indicators of Compromise -->
+    <section class="panel ioc-panel">
+      <div class="panel-head">Indicators of Compromise (IOC) <span class="sub" id="iocCount">0</span></div>
+      <div class="ioc-note">Matches against known-bad indicators (malicious packages, C2/exfil hosts, risky TLDs, execution patterns), validated in context by AI consensus.</div>
+      <div class="iocs" id="iocs"></div>
+    </section>
+
+    <!-- Findings -->
+    <section class="panel findings-panel">
+      <div class="panel-head">Validated Findings <span class="sub" id="findingsCount">0</span></div>
+      <div class="consensus-summary" id="consensusSummary"></div>
+      <div class="findings" id="findings"></div>
+    </section>
+  </div>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

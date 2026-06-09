@@ -1,63 +1,58 @@
-x-logging: &default-logging
-  driver: "json-file"
-  options:
-    max-size: "10m"
-    max-file: "3"
+﻿services:
+  # ---------------------------------------------------------------------------
+  # Core server: GitHub Core Stream + 3 scanner agents + report + dashboard.
+  # Holds NO AI keys. Talks to the isolated ai-consensus over the internal net.
+  # ---------------------------------------------------------------------------
+  core:
+    build: ./backend
+    container_name: SecureChain-core
+    ports:
+      - "8000:8000"            # only the core is exposed to the host
+    environment:
+      - AI_SERVICE_URL=http://ai-consensus:9100
+    volumes:
+      - ./frontend:/frontend:ro
+      - report_storage:/app/reports
+    networks:
+      - internal
+    depends_on:
+      - ai-consensus
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------
+  # ISOLATED AI consensus service: the ONLY container holding the AI keys and
+  # the ONLY one that talks to Gemini / Claude. Not published to the host.
+  # ---------------------------------------------------------------------------
+  ai-consensus:
+    build: ./ai-consensus
+    container_name: SecureChain-ai
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-20250514}
+    # No `ports:` mapping -> unreachable from the host; internal network only.
+    networks:
+      - internal
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
 
 networks:
-  packetsentry:
+  internal:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.30.0.0/24
-
-services:
-
-  traffic-engine:
-    build: ./traffic-engine
-    container_name: packetsentry-engine
-    environment:
-      - DASHBOARD_URL=http://dashboard:5000
-    networks:
-      - packetsentry
-    restart: unless-stopped
-    logging: *default-logging
-
-  claude-agent:
-    build: ./claude-agent
-    container_name: packetsentry-agent
-    network_mode: "host"
-    cap_add:
-      - NET_ADMIN
-      - NET_RAW
-      - SYS_ADMIN
-    environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-6}
-      - MIN_TOOL_CALLS_FOR_COMPLETE=${MIN_TOOL_CALLS_FOR_COMPLETE:-3}
-      - DASHBOARD_URL=http://127.0.0.1:5000
-    volumes:
-      - pcap_storage:/pcaps
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    depends_on:
-      - traffic-engine
-    restart: unless-stopped
-    logging: *default-logging
-    profiles:
-      - attack
-
-  dashboard:
-    build: ./dashboard
-    container_name: packetsentry-dashboard
-    ports:
-      - "5000:5000"
-    environment:
-      - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-6}
-      - AGENT_URL=http://172.30.0.1:8000
-    networks:
-      - packetsentry
-    restart: unless-stopped
-    logging: *default-logging
 
 volumes:
-  pcap_storage:
+  report_storage:

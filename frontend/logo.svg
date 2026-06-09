@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="chainGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2f7fff"/>
+      <stop offset="50%" stop-color="#1f63d6"/>
+      <stop offset="100%" stop-color="#1558b8"/>
+    </linearGradient>
+    <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#eef2f8"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feFlood flood-color="#2f7fff" flood-opacity="0.3"/>
+      <feComposite in2="blur" operator="in"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Outer shield shape -->
+  <path d="M32 4 L10 12 L10 40 C10 52 18 58 32 60 C46 58 54 52 54 40 L54 12 L32 4 Z"
+        fill="url(#shieldGrad)" stroke="url(#chainGrad)" stroke-width="1.5"/>
+
+  <!-- Inner shield highlight -->
+  <path d="M32 10 L16 18 L16 36 C16 44 22 48 32 50 C42 48 48 44 48 36 L48 18 L32 10 Z"
+        fill="none" stroke="url(#chainGrad)" stroke-width="0.8" opacity="0.4"/>
+
+  <!-- Chain links forming an S-curve through the center -->
+  <g filter="url(#glow)">
+    <!-- Link 1 - top -->
+    <ellipse cx="32" cy="18" rx="7" ry="4" fill="none" stroke="url(#chainGrad)" stroke-width="2.5"/>
+    <ellipse cx="32" cy="18" rx="4" ry="2" fill="#eef2f8"/>
+
+    <!-- Link 2 - upper middle -->
+    <ellipse cx="26" cy="28" rx="7" ry="4" fill="none" stroke="url(#chainGrad)" stroke-width="2.5" transform="rotate(-15 26 28)"/>
+    <ellipse cx="26" cy="28" rx="4" ry="2" fill="#eef2f8" transform="rotate(-15 26 28)"/>
+
+    <!-- Link 3 - center -->
+    <ellipse cx="38" cy="34" rx="7" ry="4" fill="none" stroke="url(#chainGrad)" stroke-width="2.5" transform="rotate(15 38 34)"/>
+    <ellipse cx="38" cy="34" rx="4" ry="2" fill="#eef2f8" transform="rotate(15 38 34)"/>
+
+    <!-- Link 4 - lower middle -->
+    <ellipse cx="30" cy="42" rx="7" ry="4" fill="none" stroke="url(#chainGrad)" stroke-width="2.5" transform="rotate(-20 30 42)"/>
+    <ellipse cx="30" cy="42" rx="4" ry="2" fill="#eef2f8" transform="rotate(-20 30 42)"/>
+
+    <!-- Link 5 - bottom -->
+    <ellipse cx="32" cy="50" rx="7" ry="4" fill="none" stroke="url(#chainGrad)" stroke-width="2.5"/>
+    <ellipse cx="32" cy="50" rx="4" ry="2" fill="#eef2f8"/>
+  </g>
+
+  <!-- Secure lock icon at center of middle link -->
+  <g transform="translate(32, 34)">
+    <!-- Lock body -->
+    <rect x="-6" y="0" width="12" height="8" rx="2" fill="url(#chainGrad)"/>
+    <!-- Shackle -->
+    <path d="M-4 0 Q-4 -6 0 -6 Q6 -6 6 0" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
+  </g>
+
+  <!-- Subtle circuit/tech pattern on shield sides -->
+  <g opacity="0.15" stroke="url(#chainGrad)" stroke-width="0.6">
+    <line x1="14" y1="16" x2="18" y2="20"/>
+    <line x1="14" y1="24" x2="18" y2="28"/>
+    <line x1="14" y1="32" x2="18" y2="36"/>
+    <line x1="50" y1="16" x2="46" y2="20"/>
+    <line x1="50" y1="24" x2="46" y2="28"/>
+    <line x1="50" y1="32" x2="46" y2="36"/>
+  </g>
+</svg>
